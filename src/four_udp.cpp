@@ -1,12 +1,14 @@
-#include "caf/all.hpp"
-#include "caf/binary_deserializer.hpp"
-#include "caf/binary_serializer.hpp"
-#include "caf/detail/call_cfun.hpp"
-#include "caf/io/network/newb.hpp"
-#include "caf/logger.hpp"
-#include "caf/policy/newb_basp.hpp"
-#include "caf/policy/newb_ordering.hpp"
-#include "caf/policy/newb_udp.hpp"
+#include <caf/all.hpp>
+#include <caf/binary_deserializer.hpp>
+#include <caf/binary_serializer.hpp>
+#include <caf/detail/call_cfun.hpp>
+#include <caf/io/network/newb.hpp>
+#include <caf/logger.hpp>
+#include <caf/policy/newb_basp.hpp>
+#include <caf/policy/newb_ordering.hpp>
+#include <caf/policy/newb_udp.hpp>
+
+#include <benchmark/benchmark.h>
 
 using namespace caf;
 using namespace caf::policy;
@@ -19,7 +21,11 @@ using ordering_atom = atom_constant<atom("ordering")>;
 constexpr size_t chunk_size = 1024; //8192; //128; //1024;
 
 struct dummy_transport : public transport_policy {
-  dummy_transport() {
+  dummy_transport()
+    : maximum(std::numeric_limits<uint16_t>::max()),
+      writing(false),
+      written(0),
+      offline_sum(0) {
     // nop
   }
 
@@ -90,7 +96,6 @@ struct dummy_transport : public transport_policy {
 
   // State for reading.
   size_t maximum;
-  bool first_message;
 
   // State for writing.
   bool writing;
@@ -130,14 +135,47 @@ struct raw_newb : public newb<new_basp_message> {
 
 class config : public actor_system_config {
 public:
-  int iterations = 10;
+  int iterations = 1;
 
   config() {
+    load<io::middleman>();
     opt_group{custom_options_, "global"}
     .add(iterations, "iterations,i", "set iterations");
   }
 };
 
+
+
+static void BM_policy_send_cost(benchmark::State& state) {
+  config cfg;
+  actor_system sys{cfg};
+  auto n = make_newb<raw_newb>(sys, invalid_native_socket);
+  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
+  auto& ref = dynamic_cast<raw_newb&>(*ptr);
+  ref.transport.reset(new dummy_transport);
+  ref.protocol.reset(new udp_protocol<ordering<datagram_basp>>(&ref));
+  for (auto _ : state) {
+    auto hw = caf::make_callback([&](byte_buffer& buf) -> error {
+      binary_serializer bs(sys, buf);
+      bs(basp_header{0, actor_id{}, actor_id{}});
+      return none;
+    });
+    {
+      auto whdl = ref.wr_buf(&hw);
+      CAF_ASSERT(whdl.buf != nullptr);
+      CAF_ASSERT(whdl.protocol != nullptr);
+      binary_serializer bs(sys, *whdl.buf);
+      auto start = whdl.buf->size();
+      whdl.buf->resize(start + chunk_size);
+      std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
+    }
+    ref.write_event();
+  }
+}
+
+BENCHMARK(BM_policy_send_cost);
+
+/*
 void caf_main(actor_system& sys, const config& cfg) {
   using clock = std::chrono::system_clock;
   using resolution = std::chrono::milliseconds;
@@ -153,20 +191,24 @@ void caf_main(actor_system& sys, const config& cfg) {
       bs(basp_header{0, actor_id{}, actor_id{}});
       return none;
     });
-    auto whdl = ref.wr_buf(&hw);
-    CAF_ASSERT(whdl.buf != nullptr);
-    CAF_ASSERT(whdl.protocol != nullptr);
-    binary_serializer bs(sys, *whdl.buf);
-
-    auto start = whdl.buf->size();
-    whdl.buf->resize(start + chunk_size);
-    std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
+    {
+      auto whdl = ref.wr_buf(&hw);
+      CAF_ASSERT(whdl.buf != nullptr);
+      CAF_ASSERT(whdl.protocol != nullptr);
+      binary_serializer bs(sys, *whdl.buf);
+      auto start = whdl.buf->size();
+      whdl.buf->resize(start + chunk_size);
+      std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
+    }
+    ref.write_event();
   }
   auto end = clock::now();
   auto ticks = std::chrono::duration_cast<resolution>(end - start).count();
   std::cout << cfg.iterations << ", " << ticks << std::endl;
 }
+*/
 
 } // namespace anonymous
 
-CAF_MAIN(io::middleman);
+BENCHMARK_MAIN();
+//CAF_MAIN(io::middleman);
