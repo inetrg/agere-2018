@@ -6,6 +6,8 @@
 #include <caf/logger.hpp>
 #include <caf/policy/newb_basp.hpp>
 #include <caf/policy/newb_ordering.hpp>
+#include <caf/policy/newb_raw.hpp>
+#include <caf/policy/newb_tcp.hpp>
 #include <caf/policy/newb_udp.hpp>
 
 #include <benchmark/benchmark.h>
@@ -18,18 +20,29 @@ namespace {
 
 using ordering_atom = atom_constant<atom("ordering")>;
 
-constexpr size_t chunk_size = 1024; //8192; //128; //1024;
+constexpr auto from = 6;
+constexpr auto to = 14;
 
+// Receiving is currently datagram only.
 struct dummy_transport : public transport_policy {
   dummy_transport()
     : maximum(std::numeric_limits<uint16_t>::max()),
       writing(false),
       written(0),
-      offline_sum(0) {
+      offline_sum(0),
+      seq_offset(0),
+      next(0) {
     // nop
   }
 
-  inline error read_some(event_handler*) override {
+  inline error read_some(event_handler* parent) override {
+    //if (seq_offset > 0) {
+    stream_serializer<charbuf> out{&parent->backend(),
+                                   receive_buffer.data() + seq_offset,
+                                   sizeof(sequence_type)};
+    out(next);
+    next += 1;
+    //}
     return none;
   }
 
@@ -103,13 +116,17 @@ struct dummy_transport : public transport_policy {
   size_t offline_sum;
   std::deque<size_t> send_sizes;
   std::deque<size_t> offline_sizes;
+
+  // Some moocks for receiving packets.
+  int seq_offset;
+  sequence_type next;
 };
 
+template <class Message>
+struct dummy_newb : public newb<Message> {
+  using message_type = Message;
 
-struct raw_newb : public newb<new_basp_message> {
-  using message_type = new_basp_message;
-
-  raw_newb(caf::actor_config& cfg, default_multiplexer& dm,
+  dummy_newb(caf::actor_config& cfg, default_multiplexer& dm,
             native_socket sockfd)
       : newb<message_type>(cfg, dm, sockfd) {
     // nop
@@ -122,12 +139,12 @@ struct raw_newb : public newb<new_basp_message> {
   }
 
   behavior make_behavior() override {
-    set_default_handler(print_and_drop);
+    this->set_default_handler(print_and_drop);
     return {
       // Must be implemented at the moment, will be cought by the broker in a
       // later implementation.
       [=](atom_value atm, uint32_t id) {
-        protocol->timeout(atm, id);
+        this->protocol->timeout(atm, id);
       }
     };
   }
@@ -135,25 +152,25 @@ struct raw_newb : public newb<new_basp_message> {
 
 class config : public actor_system_config {
 public:
-  int iterations = 1;
-
   config() {
     load<io::middleman>();
-    opt_group{custom_options_, "global"}
-    .add(iterations, "iterations,i", "set iterations");
+    set("scheduler.max-threads", 1);
   }
 };
 
+// -- benchmarks ---------------------------------------------------------------
 
-
-static void BM_policy_send_cost(benchmark::State& state) {
+template <class Message, class Protocol>
+static void BM_send(benchmark::State& state) {
+  using newb_t = dummy_newb<Message>;
   config cfg;
   actor_system sys{cfg};
-  auto n = make_newb<raw_newb>(sys, invalid_native_socket);
+  auto n = make_newb<newb_t>(sys, invalid_native_socket);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
-  auto& ref = dynamic_cast<raw_newb&>(*ptr);
+  auto& ref = dynamic_cast<newb_t&>(*ptr);
   ref.transport.reset(new dummy_transport);
-  ref.protocol.reset(new udp_protocol<ordering<datagram_basp>>(&ref));
+  ref.protocol.reset(new Protocol(&ref));
+  size_t packet_size = state.range(0);
   for (auto _ : state) {
     auto hw = caf::make_callback([&](byte_buffer& buf) -> error {
       binary_serializer bs(sys, buf);
@@ -166,22 +183,71 @@ static void BM_policy_send_cost(benchmark::State& state) {
       CAF_ASSERT(whdl.protocol != nullptr);
       binary_serializer bs(sys, *whdl.buf);
       auto start = whdl.buf->size();
-      whdl.buf->resize(start + chunk_size);
+      whdl.buf->resize(start + packet_size);
       std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
     }
     ref.write_event();
   }
 }
 
-BENCHMARK(BM_policy_send_cost);
+BENCHMARK_TEMPLATE(BM_send, raw_data_message, tcp_protocol<raw>)
+  ->RangeMultiplier(2)->Range(1<<from,1<<to);
+BENCHMARK_TEMPLATE(BM_send, new_basp_message, tcp_protocol<stream_basp>)
+  ->RangeMultiplier(2)->Range(1<<from,1<<to);
+
+BENCHMARK_TEMPLATE(BM_send, raw_data_message, udp_protocol<raw>)
+  ->RangeMultiplier(2)->Range(1<<from,1<<to);
+BENCHMARK_TEMPLATE(BM_send, raw_data_message, udp_protocol<ordering<raw>>)
+  ->RangeMultiplier(2)->Range(1<<from,1<<to);
+BENCHMARK_TEMPLATE(BM_send, new_basp_message, udp_protocol<datagram_basp>)
+  ->RangeMultiplier(2)->Range(1<<from,1<<to);
+BENCHMARK_TEMPLATE(BM_send, new_basp_message, udp_protocol<ordering<datagram_basp>>)
+  ->RangeMultiplier(2)->Range(1<<from,1<<to);
+
+
+template <class Message, class Protocol>
+static void BM_receive(benchmark::State& state) {
+  using newb_t = dummy_newb<Message>;
+  config cfg;
+  actor_system sys{cfg};
+  auto n = make_newb<newb_t>(sys, invalid_native_socket);
+  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
+  auto& ref = dynamic_cast<newb_t&>(*ptr);
+  ref.transport.reset(new dummy_transport);
+  ref.protocol.reset(new Protocol(&ref));
+  // prepare receive buffer
+  size_t packet_size = state.range(0);
+  auto hw = caf::make_callback([&](byte_buffer& buf) -> error {
+    binary_serializer bs(sys, buf);
+    bs(basp_header{0, actor_id{}, actor_id{}});
+    return none;
+  });
+  auto whdl = ref.wr_buf(&hw);
+  auto start = whdl.buf->size();
+  whdl.buf->resize(start + packet_size);
+  std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
+  ref.transport->receive_buffer = *whdl.buf;
+  for (auto _ : state) {
+    ref.read_event();
+  }
+}
+
+BENCHMARK_TEMPLATE(BM_receive, raw_data_message, udp_protocol<raw>)
+  ->RangeMultiplier(2)->Range(1<<from, 1<<to);
+BENCHMARK_TEMPLATE(BM_receive, raw_data_message, udp_protocol<ordering<raw>>)
+  ->RangeMultiplier(2)->Range(1<<from,1<<to);
+BENCHMARK_TEMPLATE(BM_receive, new_basp_message, udp_protocol<datagram_basp>)
+  ->RangeMultiplier(2)->Range(1<<from,1<<to);
+BENCHMARK_TEMPLATE(BM_receive, new_basp_message, udp_protocol<ordering<datagram_basp>>)
+  ->RangeMultiplier(2)->Range(1<<from,1<<to);
 
 /*
 void caf_main(actor_system& sys, const config& cfg) {
   using clock = std::chrono::system_clock;
   using resolution = std::chrono::milliseconds;
-  auto n = make_newb<raw_newb>(sys, invalid_native_socket);
+  auto n = make_newb<dummy_newb>(sys, invalid_native_socket);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
-  auto& ref = dynamic_cast<raw_newb&>(*ptr);
+  auto& ref = dynamic_cast<dummy_newb&>(*ptr);
   ref.transport.reset(new dummy_transport);
   ref.protocol.reset(new udp_protocol<ordering<datagram_basp>>(&ref));
   auto start = clock::now();
