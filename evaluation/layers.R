@@ -36,6 +36,11 @@ udp_receive$name$X1 <- gsub("BM_receive<raw_data_message, udp_protocol<raw>>",  
 udp_receive$name$X1 <- gsub("BM_receive<raw_data_message, udp_protocol<ordering<raw>>>",           "ordering",        udp_receive$name$X1)
 udp_receive$name$X1 <- gsub("BM_receive<new_basp_message, udp_protocol<datagram_basp>>",           "basp",            udp_receive$name$X1)
 udp_receive$name$X1 <- gsub("BM_receive<new_basp_message, udp_protocol<ordering<datagram_basp>>>", "ordering + basp", udp_receive$name$X1)
+# Had to rename some benchmarks.
+udp_receive$name$X1 <- gsub("BM_receive_udp_raw",           "raw",             udp_receive$name$X1)
+udp_receive$name$X1 <- gsub("BM_receive_udp_ordering_raw",  "ordering",        udp_receive$name$X1)
+udp_receive$name$X1 <- gsub("BM_receive_udp_basp",          "basp",            udp_receive$name$X1)
+udp_receive$name$X1 <- gsub("BM_receive_udp_ordering_basp", "ordering + basp", udp_receive$name$X1)
 udp_receive_plot <- ggplot(udp_receive, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                            geom_line() +
                            theme_bw() +

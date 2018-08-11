@@ -25,24 +25,33 @@ constexpr auto to = 14;
 
 // Receiving is currently datagram only.
 struct dummy_transport : public transport_policy {
-  dummy_transport()
+  dummy_transport(size_t payload_len)
     : maximum(std::numeric_limits<uint16_t>::max()),
       writing(false),
       written(0),
       offline_sum(0),
-      seq_offset(0),
-      next(0) {
+      write_seq(false),
+      write_size(false),
+      next(0),
+      payload_len(payload_len),
+      upayload_len(static_cast<uint32_t>(payload_len)) {
     // nop
   }
 
   inline error read_some(event_handler* parent) override {
-    //if (seq_offset > 0) {
+    received_bytes = payload_len;
     stream_serializer<charbuf> out{&parent->backend(),
-                                   receive_buffer.data() + seq_offset,
-                                   sizeof(sequence_type)};
-    out(next);
-    next += 1;
-    //}
+                                   receive_buffer.data(),
+                                   sizeof(next) + sizeof(upayload_len)};
+    if (write_seq) {
+      out(next);
+      next += 1;
+      received_bytes += caf::policy::ordering_header_len;
+    }
+    if (write_size) {
+      out(upayload_len);
+      received_bytes += caf::policy::basp_header_len;
+    }
     return none;
   }
 
@@ -118,8 +127,11 @@ struct dummy_transport : public transport_policy {
   std::deque<size_t> offline_sizes;
 
   // Some moocks for receiving packets.
-  int seq_offset;
+  bool write_seq;
+  bool write_size;
   sequence_type next;
+  size_t payload_len;
+  uint32_t upayload_len;
 };
 
 template <class Message>
@@ -136,6 +148,7 @@ struct dummy_newb : public newb<Message> {
   void handle(message_type&) override {
     CAF_PUSH_AID_FROM_PTR(this);
     CAF_LOG_TRACE("");
+    received = true;
   }
 
   behavior make_behavior() override {
@@ -148,6 +161,8 @@ struct dummy_newb : public newb<Message> {
       }
     };
   }
+
+  bool received;
 };
 
 class config : public actor_system_config {
@@ -158,7 +173,18 @@ public:
   }
 };
 
-// -- benchmarks ---------------------------------------------------------------
+class no_clock_config : public actor_system_config {
+public:
+  no_clock_config() {
+    set("scheduler.policy", atom("testing"));
+    set("logger.inline-output", true);
+    set("middleman.manual-multiplexing", true);
+    set("middleman.attach-utility-actors", true);
+    load<io::middleman>();
+  }
+};
+
+// -- sending ------------------------------------------------------------------
 
 template <class Message, class Protocol>
 static void BM_send(benchmark::State& state) {
@@ -168,7 +194,7 @@ static void BM_send(benchmark::State& state) {
   auto n = make_newb<newb_t>(sys, invalid_native_socket);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   auto& ref = dynamic_cast<newb_t&>(*ptr);
-  ref.transport.reset(new dummy_transport);
+  ref.transport.reset(new dummy_transport(state.range(0)));
   ref.protocol.reset(new Protocol(&ref));
   size_t packet_size = state.range(0);
   for (auto _ : state) {
@@ -204,17 +230,23 @@ BENCHMARK_TEMPLATE(BM_send, new_basp_message, udp_protocol<datagram_basp>)
 BENCHMARK_TEMPLATE(BM_send, new_basp_message, udp_protocol<ordering<datagram_basp>>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
 
+// -- receiving ----------------------------------------------------------------
 
 template <class Message, class Protocol>
-static void BM_receive(benchmark::State& state) {
-  using newb_t = dummy_newb<Message>;
+static void BM_receive_impl(benchmark::State& state, bool wseq, bool wsize) {
+  using message_t = Message;
+  using newb_t = dummy_newb<message_t>;
+  using proto_t = Protocol;
   config cfg;
   actor_system sys{cfg};
   auto n = make_newb<newb_t>(sys, invalid_native_socket);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   auto& ref = dynamic_cast<newb_t&>(*ptr);
-  ref.transport.reset(new dummy_transport);
-  ref.protocol.reset(new Protocol(&ref));
+  auto tptr = new dummy_transport(state.range(0));
+  tptr->write_seq = wseq;
+  tptr->write_size = wsize;
+  ref.transport.reset(tptr);
+  ref.protocol.reset(new proto_t(&ref));
   // prepare receive buffer
   size_t packet_size = state.range(0);
   auto hw = caf::make_callback([&](byte_buffer& buf) -> error {
@@ -222,59 +254,203 @@ static void BM_receive(benchmark::State& state) {
     bs(basp_header{0, actor_id{}, actor_id{}});
     return none;
   });
-  auto whdl = ref.wr_buf(&hw);
-  auto start = whdl.buf->size();
-  whdl.buf->resize(start + packet_size);
-  std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
-  ref.transport->receive_buffer = *whdl.buf;
+  {
+    auto whdl = ref.wr_buf(&hw);
+    auto start = whdl.buf->size();
+    whdl.buf->resize(start + packet_size);
+    std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
+  }
+  ref.transport->receive_buffer = ref.transport->send_buffer;
+  for (auto _ : state) {
+    ref.received = false;
+    ref.read_event();
+    if (!ref.received) {
+      std::cerr << "seems that we have a problem" << std::endl;
+      std::abort();
+    }
+  }
+}
+
+static void BM_receive_udp_raw(benchmark::State& state) {
+  BM_receive_impl<raw_data_message, udp_protocol<raw>>(state, false, false);
+}
+
+static void BM_receive_udp_ordering_raw(benchmark::State& state) {
+  BM_receive_impl<raw_data_message, udp_protocol<ordering<raw>>>(state, true, false);
+}
+
+static void BM_receive_udp_basp(benchmark::State& state) {
+  BM_receive_impl<new_basp_message, udp_protocol<datagram_basp>>(state, false, true);
+}
+
+static void BM_receive_udp_ordering_basp(benchmark::State& state) {
+  BM_receive_impl<new_basp_message, udp_protocol<ordering<datagram_basp>>>(state, true, true);
+}
+
+BENCHMARK(BM_receive_udp_raw)->RangeMultiplier(2)->Range(1<<from, 1<<to);
+BENCHMARK(BM_receive_udp_ordering_raw)->RangeMultiplier(2)->Range(1<<from, 1<<to);
+BENCHMARK(BM_receive_udp_basp)->RangeMultiplier(2)->Range(1<<from, 1<<to);
+BENCHMARK(BM_receive_udp_ordering_basp)->RangeMultiplier(2)->Range(1<<from, 1<<to);
+
+// -- ordering -----------------------------------------------------------------
+
+/*
+// For the ordering test
+struct dummy_ordering_transport : public transport_policy {
+  dummy_ordering_transport()
+    : maximum(std::numeric_limits<uint16_t>::max()),
+      writing(false),
+      written(0),
+      offline_sum(0),
+      index(0) {
+    // nop
+  }
+
+  inline error read_some(event_handler*) override {
+    std::cerr << "index = " << index << ", packets.size() = " << packets.size() << std::endl;
+    if (index >= packets.size()) {
+      std::cerr << "Not enough packets in the buffer" << std::endl;
+      std::abort();
+    }
+    receive_buffer = std::move(packets[index]);
+    index += 1;
+    return none;
+  }
+
+  inline bool should_deliver() override {
+    return true;
+  }
+
+  void prepare_next_read(event_handler*) override {
+    received_bytes = 0;
+    receive_buffer.resize(maximum);
+  }
+
+  inline void configure_read(io::receive_policy::config) override {
+    // nop
+  }
+
+  inline error write_some(event_handler* parent) override {
+    written += send_sizes.front();
+    send_sizes.pop_front();
+    auto remaining = send_buffer.size() - written;
+    count += 1;
+    if (remaining == 0)
+      prepare_next_write(parent);
+    return none;
+  }
+
+  void prepare_next_write(event_handler*) override {
+    written = 0;
+    send_buffer.clear();
+    send_sizes.clear();
+    if (offline_buffer.empty()) {
+      writing = false;
+    } else {
+      offline_sizes.push_back(offline_buffer.size() - offline_sum);
+       // Switch buffers.
+      send_buffer.swap(offline_buffer);
+      send_sizes.swap(offline_sizes);
+      // Reset sum.
+      offline_sum = 0;
+    }
+  }
+
+  byte_buffer& wr_buf() override {
+    if (!offline_buffer.empty()) {
+      auto chunk_size = offline_buffer.size() - offline_sum;
+      offline_sizes.push_back(chunk_size);
+      offline_sum += chunk_size;
+    }
+    return offline_buffer;
+  }
+
+  void flush(event_handler* parent) override {
+    if (!offline_buffer.empty() && !writing) {
+      writing = true;
+      prepare_next_write(parent);
+    }
+  }
+
+  expected<native_socket>
+  connect(const std::string&, uint16_t,
+          optional<protocol::network> = none) override {
+    return invalid_native_socket;
+  }
+
+  // State for reading.
+  size_t maximum;
+
+  // State for writing.
+  bool writing;
+  size_t written;
+  size_t offline_sum;
+  std::deque<size_t> send_sizes;
+  std::deque<size_t> offline_sizes;
+
+  // Some moocks for receiving packets.
+  size_t index;
+  std::vector<byte_buffer> packets;
+};
+
+class MyFixture : public benchmark::Fixture {
+public:
+  using newb_t = dummy_newb<raw_data_message>;
+  using proto_t = udp_protocol<ordering<raw>>;
+
+  no_clock_config cfg;
+  actor_system sys{cfg};
+  actor n;
+
+  MyFixture() {
+    n = make_newb<newb_t>(sys, invalid_native_socket);
+    auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
+    auto& ref = dynamic_cast<newb_t&>(*ptr);
+    ref.transport.reset(new dummy_ordering_transport);
+    ref.protocol.reset(new proto_t(&ref));
+  }
+
+  void SetUp(const benchmark::State& state) {
+    std::cerr << "calling setup" << std::endl;
+    // Prepare packets to receive.
+    auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
+    auto& ref = dynamic_cast<newb_t&>(*ptr);
+    auto tptr = dynamic_cast<dummy_ordering_transport*>(ref.transport.get());
+    size_t packet_size = state.range(0);
+    sequence_type next = 0;
+    for (int i = 0; i < 10; ++i) {
+      auto whdl = ref.wr_buf(nullptr);
+      auto start = whdl.buf->size();
+      whdl.buf->resize(start + packet_size);
+      std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
+      stream_serializer<charbuf> out{sys,
+                                     whdl.buf->data(),
+                                     sizeof(sequence_type)};
+      out(next);
+      next += 1;
+      tptr->packets.push_back(*whdl.buf);
+    }
+  }
+
+  void TearDown(const ::benchmark::State&) {
+    // nop
+  }
+};
+
+BENCHMARK_DEFINE_F(MyFixture, BM_receive_udp_unordered)(benchmark::State& state) {
+  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
+  auto& ref = dynamic_cast<newb_t&>(*ptr);
   for (auto _ : state) {
     ref.read_event();
   }
 }
-
-BENCHMARK_TEMPLATE(BM_receive, raw_data_message, udp_protocol<raw>)
-  ->RangeMultiplier(2)->Range(1<<from, 1<<to);
-BENCHMARK_TEMPLATE(BM_receive, raw_data_message, udp_protocol<ordering<raw>>)
-  ->RangeMultiplier(2)->Range(1<<from,1<<to);
-BENCHMARK_TEMPLATE(BM_receive, new_basp_message, udp_protocol<datagram_basp>)
-  ->RangeMultiplier(2)->Range(1<<from,1<<to);
-BENCHMARK_TEMPLATE(BM_receive, new_basp_message, udp_protocol<ordering<datagram_basp>>)
-  ->RangeMultiplier(2)->Range(1<<from,1<<to);
+*/
 
 /*
-void caf_main(actor_system& sys, const config& cfg) {
-  using clock = std::chrono::system_clock;
-  using resolution = std::chrono::milliseconds;
-  auto n = make_newb<dummy_newb>(sys, invalid_native_socket);
-  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
-  auto& ref = dynamic_cast<dummy_newb&>(*ptr);
-  ref.transport.reset(new dummy_transport);
-  ref.protocol.reset(new udp_protocol<ordering<datagram_basp>>(&ref));
-  auto start = clock::now();
-  for (int i = 0; i < cfg.iterations; ++i) {
-    auto hw = caf::make_callback([&](byte_buffer& buf) -> error {
-      binary_serializer bs(sys, buf);
-      bs(basp_header{0, actor_id{}, actor_id{}});
-      return none;
-    });
-    {
-      auto whdl = ref.wr_buf(&hw);
-      CAF_ASSERT(whdl.buf != nullptr);
-      CAF_ASSERT(whdl.protocol != nullptr);
-      binary_serializer bs(sys, *whdl.buf);
-      auto start = whdl.buf->size();
-      whdl.buf->resize(start + chunk_size);
-      std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
-    }
-    ref.write_event();
-  }
-  auto end = clock::now();
-  auto ticks = std::chrono::duration_cast<resolution>(end - start).count();
-  std::cout << cfg.iterations << ", " << ticks << std::endl;
-}
+BENCHMARK_REGISTER_F(MyFixture, BM_receive_udp_unordered)
+  ->RangeMultiplier(2)->Range(1<<from,1<<to);
 */
 
 } // namespace anonymous
 
 BENCHMARK_MAIN();
-//CAF_MAIN(io::middleman);
