@@ -32,16 +32,20 @@ udp_send_plot <- ggplot(udp_send, aes(x=name$X2, y=real_time / 1000, color=name$
 ggsave("udp_send.pdf", plot=udp_send_plot, width=3.4, height=2.3)
 # Get UDP receive tests.
 udp_receive <- split(udp,udp$operation)[['receive']]
-udp_receive$name$X1 <- gsub("BM_receive<raw_data_message, udp_protocol<raw>>",                     "raw",             udp_receive$name$X1)
-udp_receive$name$X1 <- gsub("BM_receive<raw_data_message, udp_protocol<ordering<raw>>>",           "ordering",        udp_receive$name$X1)
-udp_receive$name$X1 <- gsub("BM_receive<new_basp_message, udp_protocol<datagram_basp>>",           "basp",            udp_receive$name$X1)
-udp_receive$name$X1 <- gsub("BM_receive<new_basp_message, udp_protocol<ordering<datagram_basp>>>", "ordering + basp", udp_receive$name$X1)
+# Prepare splitting by sequence / single tests.
+udp_receive$sequence <- data.frame(ifelse(grepl("sequence", udp_receive$name$X1), "yes", "no"))
+# Process single results.
+udp_receive_single <- split(udp_receive,udp_receive$sequence)[['no']]
+udp_receive_single$name$X1 <- gsub("BM_receive<raw_data_message, udp_protocol<raw>>",                     "raw",             udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive<raw_data_message, udp_protocol<ordering<raw>>>",           "ordering",        udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive<new_basp_message, udp_protocol<datagram_basp>>",           "basp",            udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive<new_basp_message, udp_protocol<ordering<datagram_basp>>>", "ordering + basp", udp_receive_single$name$X1)
 # Had to rename some benchmarks.
-udp_receive$name$X1 <- gsub("BM_receive_udp_raw",           "raw",             udp_receive$name$X1)
-udp_receive$name$X1 <- gsub("BM_receive_udp_ordering_raw",  "ordering",        udp_receive$name$X1)
-udp_receive$name$X1 <- gsub("BM_receive_udp_basp",          "basp",            udp_receive$name$X1)
-udp_receive$name$X1 <- gsub("BM_receive_udp_ordering_basp", "ordering + basp", udp_receive$name$X1)
-udp_receive_plot <- ggplot(udp_receive, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
+udp_receive_single$name$X1 <- gsub("BM_receive_udp_raw",           "raw",             udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive_udp_ordering_raw",  "ordering",        udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive_udp_basp",          "basp",            udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive_udp_ordering_basp", "ordering + basp", udp_receive_single$name$X1)
+udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                            geom_line() +
                            theme_bw() +
                            theme(
@@ -50,10 +54,23 @@ udp_receive_plot <- ggplot(udp_receive, aes(x=name$X2, y=real_time / 1000, color
                              text=element_text(size=9)
                            ) +
                            labs(x="Packet Size [bytes]", y="Time [ms]")
-ggsave("udp_receive.pdf", plot=udp_receive_plot, width=3.4, height=2.3)
+ggsave("udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height=2.3)
 
-
-
+# Process sequence results.
+udp_receive_sequence <- split(udp_receive,udp_receive$sequence)[['yes']]
+udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_ordering_raw_sequence_inorder", "inorder",  udp_receive_sequence$name$X1)
+udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_ordering_raw_sequence_dropped", "dropped", udp_receive_sequence$name$X1)
+udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_ordering_raw_sequence_late",    "late", udp_receive_sequence$name$X1)
+udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
+                                    geom_line() +
+                                    theme_bw() +
+                                    theme(
+                                      legend.title = element_blank(),
+                                      legend.position = "top",
+                                      text=element_text(size=9)
+                                    ) +
+                                    labs(x="Packet Size [bytes]", y="Time [ms]")
+ggsave("udp_receive_sequence.pdf", plot=udp_receive_sequence_plot, width=3.4, height=2.3)
 
 # Get tcp related data.
 tcp <- split(df,df$proto)[['tcp']]

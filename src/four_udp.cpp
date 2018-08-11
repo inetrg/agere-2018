@@ -180,6 +180,7 @@ public:
     set("logger.inline-output", true);
     set("middleman.manual-multiplexing", true);
     set("middleman.attach-utility-actors", true);
+    set("middleman.max-pending-messages", 5);
     load<io::middleman>();
   }
 };
@@ -265,7 +266,7 @@ static void BM_receive_impl(benchmark::State& state, bool wseq, bool wsize) {
     ref.received = false;
     ref.read_event();
     if (!ref.received) {
-      std::cerr << "seems that we have a problem" << std::endl;
+      std::cerr << "Did not receive the expected message!" << std::endl;
       std::abort();
     }
   }
@@ -294,7 +295,13 @@ BENCHMARK(BM_receive_udp_ordering_basp)->RangeMultiplier(2)->Range(1<<from, 1<<t
 
 // -- ordering -----------------------------------------------------------------
 
-/*
+
+enum instruction : int {
+  next,
+  skip,
+  recover,
+};
+
 // For the ordering test
 struct dummy_ordering_transport : public transport_policy {
   dummy_ordering_transport()
@@ -302,18 +309,37 @@ struct dummy_ordering_transport : public transport_policy {
       writing(false),
       written(0),
       offline_sum(0),
-      index(0) {
+      index(0),
+      next_seq(0) {
     // nop
   }
 
-  inline error read_some(event_handler*) override {
-    std::cerr << "index = " << index << ", packets.size() = " << packets.size() << std::endl;
-    if (index >= packets.size()) {
-      std::cerr << "Not enough packets in the buffer" << std::endl;
-      std::abort();
+  inline error read_some(event_handler* parent) override {
+    stream_serializer<charbuf> out{&parent->backend(),
+                                   receive_buffer.data(),
+                                   sizeof(next_seq)};
+    switch (instructions[index]) {
+      case skip:
+        //std::cerr << " skip (" << ext_seq << ")" << std::endl;
+        skipped.push_back(next_seq);
+        next_seq += 1;
+        // Fall through intended.
+      case next:
+        //std::cerr << " next (" << next_seq << ")" << std::endl;
+        out(next_seq);
+        next_seq += 1;
+        break;
+      case recover:
+        //std::cerr << " recover (" << skipped.front() << ")" << std::endl;
+        out(skipped.front());
+        skipped.pop_front();
+        break;
     }
-    receive_buffer = std::move(packets[index]);
-    index += 1;
+    received_bytes = payload_len + caf::policy::ordering_header_len;
+    if (index >= instructions.size())
+      index = 0;
+    else
+      index += 1;
     return none;
   }
 
@@ -390,66 +416,215 @@ struct dummy_ordering_transport : public transport_policy {
 
   // Some moocks for receiving packets.
   size_t index;
-  std::vector<byte_buffer> packets;
+  size_t payload_len;
+  sequence_type next_seq;
+  std::vector<instruction> instructions;
+  std::deque<sequence_type> skipped;
 };
 
-class MyFixture : public benchmark::Fixture {
-public:
+// Deliver a sequence of message all inorder.
+static void BM_receive_udp_ordering_raw_sequence_inorder(benchmark::State& state) {
   using newb_t = dummy_newb<raw_data_message>;
   using proto_t = udp_protocol<ordering<raw>>;
-
   no_clock_config cfg;
   actor_system sys{cfg};
-  actor n;
-
-  MyFixture() {
-    n = make_newb<newb_t>(sys, invalid_native_socket);
-    auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
-    auto& ref = dynamic_cast<newb_t&>(*ptr);
-    ref.transport.reset(new dummy_ordering_transport);
-    ref.protocol.reset(new proto_t(&ref));
-  }
-
-  void SetUp(const benchmark::State& state) {
-    std::cerr << "calling setup" << std::endl;
-    // Prepare packets to receive.
-    auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
-    auto& ref = dynamic_cast<newb_t&>(*ptr);
-    auto tptr = dynamic_cast<dummy_ordering_transport*>(ref.transport.get());
-    size_t packet_size = state.range(0);
-    sequence_type next = 0;
-    for (int i = 0; i < 10; ++i) {
-      auto whdl = ref.wr_buf(nullptr);
-      auto start = whdl.buf->size();
-      whdl.buf->resize(start + packet_size);
-      std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
-      stream_serializer<charbuf> out{sys,
-                                     whdl.buf->data(),
-                                     sizeof(sequence_type)};
-      out(next);
-      next += 1;
-      tptr->packets.push_back(*whdl.buf);
-    }
-  }
-
-  void TearDown(const ::benchmark::State&) {
-    // nop
-  }
-};
-
-BENCHMARK_DEFINE_F(MyFixture, BM_receive_udp_unordered)(benchmark::State& state) {
+  actor n = make_newb<newb_t>(sys, invalid_native_socket);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   auto& ref = dynamic_cast<newb_t&>(*ptr);
-  for (auto _ : state) {
+  auto tptr = new dummy_ordering_transport;
+  ref.transport.reset(tptr);
+  ref.protocol.reset(new proto_t(&ref));
+  // Prepare packets to receive.
+  size_t packet_size = state.range(0);
+  tptr->payload_len = packet_size;
+  {
+    auto whdl = ref.wr_buf(nullptr);
+    auto start = whdl.buf->size();
+    whdl.buf->resize(start + packet_size);
+    std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
+  }
+  ref.transport->receive_buffer = ref.transport->send_buffer;
+  // Add instructions.
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  // 5
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  auto msg_expected = [&] {
+    //std::cerr << "expected" << std::endl;
+    ref.received = false;
     ref.read_event();
+    if (!ref.received) {
+      std::cerr << "expected message did not arrive" << std::endl;
+      std::abort();
+    }
+  };
+  for (auto _ : state) {
+    tptr->index = 0;
+    msg_expected();
+    msg_expected();
+    msg_expected();
+    msg_expected();
+    msg_expected();
+    // 5
+    msg_expected();
+    msg_expected();
+    msg_expected();
+    msg_expected();
+    msg_expected();
+    sys.clock().cancel_all();
   }
 }
-*/
 
-/*
-BENCHMARK_REGISTER_F(MyFixture, BM_receive_udp_unordered)
-  ->RangeMultiplier(2)->Range(1<<from,1<<to);
-*/
+BENCHMARK(BM_receive_udp_ordering_raw_sequence_inorder)->RangeMultiplier(2)->Range(1<<from, 1<<to);
+
+// Deliver a sequence of messages with one message missing.
+static void BM_receive_udp_ordering_raw_sequence_dropped(benchmark::State& state) {
+  using newb_t = dummy_newb<raw_data_message>;
+  using proto_t = udp_protocol<ordering<raw>>;
+  no_clock_config cfg;
+  actor_system sys{cfg};
+  actor n = make_newb<newb_t>(sys, invalid_native_socket);
+  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
+  auto& ref = dynamic_cast<newb_t&>(*ptr);
+  auto tptr = new dummy_ordering_transport;
+  ref.transport.reset(tptr);
+  ref.protocol.reset(new proto_t(&ref));
+  // Prepare packets to receive.
+  size_t packet_size = state.range(0);
+  tptr->payload_len = packet_size;
+  {
+    auto whdl = ref.wr_buf(nullptr);
+    auto start = whdl.buf->size();
+    whdl.buf->resize(start + packet_size);
+    std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
+  }
+  ref.transport->receive_buffer = ref.transport->send_buffer;
+  // Add instructions.
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::skip);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  // 5
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  auto msg_expected = [&] {
+    //std::cerr << "expected" << std::endl;
+    ref.received = false;
+    ref.read_event();
+    if (!ref.received) {
+      std::cerr << "expected message did not arrive" << std::endl;
+      std::abort();
+    }
+  };
+  auto msg_unexpected = [&] {
+    //std::cerr << "unexpected" << std::endl;
+    ref.received = false;
+    ref.read_event();
+    if (ref.received) {
+      std::cerr << "message arrive unexpectedly" << std::endl;
+      std::abort();
+    }
+  };
+  for (auto _ : state) {
+    tptr->index = 0;
+    msg_expected();
+    msg_unexpected();
+    msg_unexpected();
+    msg_unexpected();
+    msg_unexpected();
+    msg_unexpected();
+    msg_expected();
+    msg_expected();
+    msg_expected();
+    msg_expected();
+    sys.clock().cancel_all();
+  }
+}
+
+BENCHMARK(BM_receive_udp_ordering_raw_sequence_dropped)->RangeMultiplier(2)->Range(1<<from, 1<<to);
+
+// Deliver a sequence of messages with one delivered out of order.
+static void BM_receive_udp_ordering_raw_sequence_late(benchmark::State& state) {
+  using newb_t = dummy_newb<raw_data_message>;
+  using proto_t = udp_protocol<ordering<raw>>;
+  no_clock_config cfg;
+  actor_system sys{cfg};
+  actor n = make_newb<newb_t>(sys, invalid_native_socket);
+  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
+  auto& ref = dynamic_cast<newb_t&>(*ptr);
+  auto tptr = new dummy_ordering_transport;
+  ref.transport.reset(tptr);
+  ref.protocol.reset(new proto_t(&ref));
+  // Prepare packets to receive.
+  size_t packet_size = state.range(0);
+  tptr->payload_len = packet_size;
+  {
+    auto whdl = ref.wr_buf(nullptr);
+    auto start = whdl.buf->size();
+    whdl.buf->resize(start + packet_size);
+    std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
+  }
+  ref.transport->receive_buffer = ref.transport->send_buffer;
+  // Add instructions.
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::skip);
+  tptr->instructions.emplace_back(instruction::recover);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  // 5
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  tptr->instructions.emplace_back(instruction::next);
+  auto msg_expected = [&] {
+    //std::cerr << "expected" << std::endl;
+    ref.received = false;
+    ref.read_event();
+    if (!ref.received) {
+      std::cerr << "expected message did not arrive" << std::endl;
+      std::abort();
+    }
+  };
+  auto msg_unexpected = [&] {
+    //std::cerr << "unexpected" << std::endl;
+    ref.received = false;
+    ref.read_event();
+    if (ref.received) {
+      std::cerr << "message arrive unexpectedly" << std::endl;
+      std::abort();
+    }
+  };
+  for (auto _ : state) {
+    tptr->index = 0;
+    msg_expected();
+    msg_unexpected();
+    msg_expected();
+    msg_expected();
+    msg_expected();
+    // 5
+    msg_expected();
+    msg_expected();
+    msg_expected();
+    msg_expected();
+    msg_expected();
+    sys.clock().cancel_all();
+  }
+}
+
+BENCHMARK(BM_receive_udp_ordering_raw_sequence_late)->RangeMultiplier(2)->Range(1<<from, 1<<to);
+
 
 } // namespace anonymous
 
