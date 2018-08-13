@@ -423,7 +423,7 @@ struct dummy_ordering_transport : public transport_policy {
 };
 
 // Deliver a sequence of message all inorder.
-static void BM_receive_udp_ordering_raw_sequence_inorder(benchmark::State& state) {
+static void BM_receive_udp_raw_sequence_inorder(benchmark::State& state) {
   using newb_t = dummy_newb<raw_data_message>;
   using proto_t = udp_protocol<ordering<raw>>;
   no_clock_config cfg;
@@ -482,10 +482,10 @@ static void BM_receive_udp_ordering_raw_sequence_inorder(benchmark::State& state
   }
 }
 
-BENCHMARK(BM_receive_udp_ordering_raw_sequence_inorder)->RangeMultiplier(2)->Range(1<<from, 1<<to);
+BENCHMARK(BM_receive_udp_raw_sequence_inorder)->RangeMultiplier(2)->Range(1<<from, 1<<to);
 
 // Deliver a sequence of messages with one message missing.
-static void BM_receive_udp_ordering_raw_sequence_dropped(benchmark::State& state) {
+static void BM_receive_udp_raw_sequence_dropped(benchmark::State& state) {
   using newb_t = dummy_newb<raw_data_message>;
   using proto_t = udp_protocol<ordering<raw>>;
   no_clock_config cfg;
@@ -552,10 +552,10 @@ static void BM_receive_udp_ordering_raw_sequence_dropped(benchmark::State& state
   }
 }
 
-BENCHMARK(BM_receive_udp_ordering_raw_sequence_dropped)->RangeMultiplier(2)->Range(1<<from, 1<<to);
+BENCHMARK(BM_receive_udp_raw_sequence_dropped)->RangeMultiplier(2)->Range(1<<from, 1<<to);
 
 // Deliver a sequence of messages with one delivered out of order.
-static void BM_receive_udp_ordering_raw_sequence_late(benchmark::State& state) {
+static void BM_receive_udp_raw_sequence_late(benchmark::State& state) {
   using newb_t = dummy_newb<raw_data_message>;
   using proto_t = udp_protocol<ordering<raw>>;
   no_clock_config cfg;
@@ -623,7 +623,7 @@ static void BM_receive_udp_ordering_raw_sequence_late(benchmark::State& state) {
   }
 }
 
-BENCHMARK(BM_receive_udp_ordering_raw_sequence_late)->RangeMultiplier(2)->Range(1<<from, 1<<to);
+BENCHMARK(BM_receive_udp_raw_sequence_late)->RangeMultiplier(2)->Range(1<<from, 1<<to);
 
 
 } // namespace anonymous

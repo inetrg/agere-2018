@@ -58,9 +58,9 @@ ggsave("udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height
 
 # Process sequence results.
 udp_receive_sequence <- split(udp_receive,udp_receive$sequence)[['yes']]
-udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_ordering_raw_sequence_inorder", "inorder",  udp_receive_sequence$name$X1)
-udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_ordering_raw_sequence_dropped", "dropped", udp_receive_sequence$name$X1)
-udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_ordering_raw_sequence_late",    "late", udp_receive_sequence$name$X1)
+udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_raw_sequence_inorder", "inorder",  udp_receive_sequence$name$X1)
+udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_raw_sequence_dropped", "dropped", udp_receive_sequence$name$X1)
+udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_raw_sequence_late",    "late", udp_receive_sequence$name$X1)
 udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                                     geom_line() +
                                     theme_bw() +
