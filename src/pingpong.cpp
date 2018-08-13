@@ -147,6 +147,7 @@ public:
 };
 
 void caf_main(actor_system& sys, const config& cfg) {
+  using namespace std::chrono;
   using proto_t = udp_protocol<reliability<ordering<policy::raw>>>;
   //using proto_t = udp_protocol<ordering<policy::raw>>;
   using acceptor_t = udp_acceptor<proto_t>;
@@ -206,8 +207,11 @@ void caf_main(actor_system& sys, const config& cfg) {
                                                                      port);
     self->send(client, responder_atom::value, helper);
     self->send(client, config_atom::value, size_t(cfg.messages));
+    auto start = system_clock::now();
     self->send(client, send_atom::value, uint32_t(0));
     await_done("done");
+    auto end = system_clock::now();
+    std::cout << duration_cast<milliseconds>(end - start).count() << "ms" << std::endl;
     std::abort();
   }
 }
