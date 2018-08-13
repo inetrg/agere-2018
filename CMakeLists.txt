@@ -68,6 +68,9 @@ if (CAF_FOUND)
   include_directories(${CAF_INCLUDE_DIRS})
 endif ()
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
 find_package(BENCHMARK REQUIRED)
 if (BENCHMARK_FOUND)
   include_directories(${BENCHMARK_INCLUDE_DIRS})
@@ -83,6 +86,7 @@ macro(add folder name)
                         ${CAF_LIBRARY_CORE}
                         ${BENCHMARK_LIBRARIES})
   add_dependencies(${name} newb_measurements)
+  target_link_libraries(${name} Threads::Threads)
 endmacro()
 
 add(src one_raw_udp)
