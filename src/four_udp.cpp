@@ -323,7 +323,7 @@ struct dummy_ordering_transport : public transport_policy {
         //std::cerr << " skip (" << ext_seq << ")" << std::endl;
         skipped.push_back(next_seq);
         next_seq += 1;
-        // Fall through intended.
+        // fall through
       case next:
         //std::cerr << " next (" << next_seq << ")" << std::endl;
         out(next_seq);
