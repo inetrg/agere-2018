@@ -4,8 +4,8 @@
 #include "caf/detail/call_cfun.hpp"
 #include "caf/io/network/newb.hpp"
 #include "caf/logger.hpp"
-#include "caf/policy/newb_basp.hpp"
 #include "caf/policy/newb_tcp.hpp"
+#include "caf/policy/newb_raw.hpp"
 
 using namespace caf;
 using namespace caf::io::network;
@@ -18,8 +18,8 @@ using quit_atom = atom_constant<atom("quit")>;
 using responder_atom = atom_constant<atom("responder")>;
 using config_atom = atom_constant<atom("config")>;
 
-struct basp_newb : public io::network::newb<policy::new_basp_message> {
-  using message_type = policy::new_basp_message;
+struct basp_newb : public io::network::newb<policy::raw_data_message> {
+  using message_type = policy::raw_data_message;
 
   basp_newb(caf::actor_config& cfg, default_multiplexer& dm,
             native_socket sockfd)
@@ -49,12 +49,7 @@ struct basp_newb : public io::network::newb<policy::new_basp_message> {
   }
 
   void send_message(uint32_t value) {
-    auto hw = caf::make_callback([&](io::network::byte_buffer& buf) -> error {
-      binary_serializer bs(&backend(), buf);
-      bs(policy::basp_header{0, id(), actor_id{}});
-      return none;
-    });
-    auto whdl = wr_buf(&hw);
+    auto whdl = wr_buf(nullptr);
     binary_serializer bs(&backend(), *whdl.buf);
     bs(value);
   }
@@ -117,7 +112,7 @@ struct tcp_acceptor
     ref.transport = std::move(pol);
     ref.protocol.reset(new ProtocolPolicy(&ref));
     ref.responder = responder;
-    ref.configure_read(io::receive_policy::exactly(basp_header_len));
+    ref.configure_read(io::receive_policy::exactly(sizeof(uint32_t)));
     ref.is_client = false;
     anon_send(responder, n);
     return n;
@@ -144,7 +139,7 @@ public:
 
 void caf_main(actor_system& sys, const config& cfg) {
   using namespace std::chrono;
-  using proto_t = tcp_protocol<stream_basp>;
+  using proto_t = tcp_protocol<raw>;
   using acceptor_t = tcp_acceptor<proto_t>;
   const char* host = cfg.host.c_str();
   const uint16_t port = cfg.port;
