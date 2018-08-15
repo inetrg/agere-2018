@@ -1,4 +1,6 @@
-df <- read.csv("layers.csv", sep = ",", skip = 8)
+library(tikzDevice)
+
+df <- read.csv("evaluation/layers.csv", sep = ",", skip = 8)
 # Clean empty columns.
 emptycols <- sapply(df, function (k) all(is.na(k)))
 df <- df[!emptycols]
@@ -22,14 +24,23 @@ udp_send$name$X1 <- gsub("BM_send<new_basp_message, udp_protocol<datagram_basp>>
 udp_send$name$X1 <- gsub("BM_send<new_basp_message, udp_protocol<ordering<datagram_basp>>>", "ordering + basp", udp_send$name$X1)
 udp_send_plot <- ggplot(udp_send, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                  geom_line() +
+                 geom_point(aes(shape=name$X1)) +
                  theme_bw() +
                  theme(
                    legend.title = element_blank(),
                    legend.position = "top",
+                   legend.margin=margin(0,0,0,0),
+                   legend.box.margin=margin(-10,-10,-10,-10),
                    text=element_text(size=9)
                  ) +
+                 scale_color_brewer(type = "qual", palette = 7) +
                  labs(x="Packet Size [bytes]", y="Time [ms]")
-ggsave("udp_send.pdf", plot=udp_send_plot, width=3.4, height=2.3)
+ggsave("figs/udp_send.pdf", plot=udp_send_plot, width=3.4, height=2.3)
+### tikz export
+tikz(file = "figs/udp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
+udp_send_plot
+dev.off()
+
 # Get UDP receive tests.
 udp_receive <- split(udp,udp$operation)[['receive']]
 # Prepare splitting by sequence / single tests.
@@ -47,14 +58,22 @@ udp_receive_single$name$X1 <- gsub("BM_receive_udp_basp",          "basp",      
 udp_receive_single$name$X1 <- gsub("BM_receive_udp_ordering_basp", "ordering + basp", udp_receive_single$name$X1)
 udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                            geom_line() +
+                           geom_point(aes(shape=name$X1)) +
                            theme_bw() +
                            theme(
                              legend.title = element_blank(),
                              legend.position = "top",
+                             legend.margin=margin(0,0,0,0),
+                             legend.box.margin=margin(-10,-10,-10,-10),
                              text=element_text(size=9)
                            ) +
+                           scale_color_brewer(type = "qual", palette = 7) +
                            labs(x="Packet Size [bytes]", y="Time [ms]")
-ggsave("udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height=2.3)
+ggsave("figs/udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height=2.3)
+### tikz export
+tikz(file = "figs/udp_receive_single.tikz", sanitize=TRUE, width=3.4, height=2.3)
+udp_receive_single_plot
+dev.off()
 
 # Process sequence results.
 udp_receive_sequence <- split(udp_receive,udp_receive$sequence)[['yes']]
@@ -63,14 +82,22 @@ udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_raw_sequence_dropped", "dro
 udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_raw_sequence_late",    "late", udp_receive_sequence$name$X1)
 udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                                     geom_line() +
+                                    geom_point(aes(shape=name$X1)) +
                                     theme_bw() +
                                     theme(
                                       legend.title = element_blank(),
                                       legend.position = "top",
+                                      legend.margin=margin(0,0,0,0),
+                                      legend.box.margin=margin(-10,-10,-10,-10),
                                       text=element_text(size=9)
                                     ) +
+                                    scale_color_brewer(type = "qual", palette = 7) +
                                     labs(x="Packet Size [bytes]", y="Time [ms]")
-ggsave("udp_receive_sequence.pdf", plot=udp_receive_sequence_plot, width=3.4, height=2.3)
+ggsave("figs/udp_receive_sequence.pdf", plot=udp_receive_sequence_plot, width=3.4, height=2.3)
+### tikz export
+tikz(file = "figs/udp_receive_sequence.tikz", sanitize=TRUE, width=3.4, height=2.3)
+udp_receive_sequence_plot
+dev.off()
 
 # Get tcp related data.
 tcp <- split(df,df$proto)[['tcp']]
@@ -81,11 +108,20 @@ tcp$name$X1 <- gsub("BM_send<raw_data_message, tcp_protocol<raw>>",         "raw
 tcp$name$X1 <- gsub("BM_send<new_basp_message, tcp_protocol<stream_basp>>", "basp", tcp$name$X1)
 tcp_plot <- ggplot(tcp, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                    geom_line() +
+                   geom_point(aes(shape=name$X1)) +
                    theme_bw() +
                    theme(
                      legend.title = element_blank(),
                      legend.position = "top",
+                     legend.margin=margin(0,0,0,0),
+                     legend.box.margin=margin(-10,-10,-10,-10),
                      text=element_text(size=9)
                    ) +
+                   scale_color_brewer(type = "qual", palette = 7) +
                    labs(x="Packet Size [bytes]", y="Time [ms]")
-ggsave("tcp_send.pdf", plot=tcp_plot, width=3.4, height=2.3)
+### pdf export
+ggsave("figs/tcp_send.pdf", plot=tcp_plot, width=3.4, height=2.3)
+### tikz export
+tikz(file = "figs/tcp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
+tcp_plot
+dev.off()
