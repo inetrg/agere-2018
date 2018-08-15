@@ -80,10 +80,11 @@ udp_receive_single$benchmark <- gsub("BM_receive_udp_raw",           "Raw",     
 udp_receive_single$benchmark <- gsub("BM_receive_udp_ordering_raw",  "Ordering",        udp_receive_single$benchmark)
 udp_receive_single$benchmark <- gsub("BM_receive_udp_basp",          "BASP",            udp_receive_single$benchmark)
 udp_receive_single$benchmark <- gsub("BM_receive_udp_ordering_basp", "Ordering + BASP", udp_receive_single$benchmark)
-udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=name$X2, y=real_time / 1000, color=benchmark)) +
+udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=size, y=real_time / 1000, color=benchmark)) +
                            geom_line() +
                            geom_point(aes(shape=benchmark)) +
                            scale_shape_manual(values = c(0, 1, 2, 3)) +
+                           scale_y_continuous(limits = c(0, 0.3), breaks = seq(0, 0.3, 0.1)) + 
                            theme_bw() +
                            theme(
                              legend.title = element_blank(),
@@ -105,7 +106,7 @@ udp_receive_sequence <- split(udp_receive,udp_receive$sequence)[['yes']]
 udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_inorder", "Inorder",  udp_receive_sequence$benchmark)
 udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_dropped", "Dropped", udp_receive_sequence$benchmark)
 udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_late",    "Late", udp_receive_sequence$benchmark)
-udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=name$X2, y=real_time / 1000, color=benchmark)) +
+udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=size, y=real_time / 1000, color=benchmark)) +
                                     geom_line() +
                                     geom_point(aes(shape=benchmark)) +
                                     scale_shape_manual(values = c(4, 5, 6)) +
@@ -134,7 +135,7 @@ tcp$benchmark <- gsub("BM_send<new_basp_message, tcp_protocol<stream_basp>>", "B
 
 colors <- brewer.pal(n = 7, "Oranges")[3:9]
 
-tcp_plot <- ggplot(tcp, aes(x=name$X2, y=real_time / 1000, color=benchmark)) +
+tcp_plot <- ggplot(tcp, aes(x=size, y=real_time / 1000, color=benchmark)) +
                    geom_line() +
                    geom_point(aes(shape=benchmark)) +
                    scale_shape_manual(values = c(0, 3)) +
