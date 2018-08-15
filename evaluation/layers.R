@@ -34,7 +34,7 @@ udp_send_plot <- ggplot(udp_send, aes(x=name$X2, y=real_time / 1000, color=name$
                    text=element_text(size=9)
                  ) +
                  scale_color_brewer(type = "qual", palette = 7) +
-                 labs(x="Packet Size [bytes]", y="Time [ms]")
+                 labs(x="Payload Size [bytes]", y="Time [ms]")
 ggsave("figs/udp_send.pdf", plot=udp_send_plot, width=3.4, height=2.3)
 ### tikz export
 tikz(file = "figs/udp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
@@ -68,7 +68,7 @@ udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=name$X2, y=real_time
                              text=element_text(size=9)
                            ) +
                            scale_color_brewer(type = "qual", palette = 7) +
-                           labs(x="Packet Size [bytes]", y="Time [ms]")
+                           labs(x="Payload Size [bytes]", y="Time [ms]")
 ggsave("figs/udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height=2.3)
 ### tikz export
 tikz(file = "figs/udp_receive_single.tikz", sanitize=TRUE, width=3.4, height=2.3)
@@ -92,7 +92,7 @@ udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=name$X2, y=real_
                                       text=element_text(size=9)
                                     ) +
                                     scale_color_brewer(type = "qual", palette = 7) +
-                                    labs(x="Packet Size [bytes]", y="Time [ms]")
+                                    labs(x="Payload Size [bytes]", y="Time [ms]")
 ggsave("figs/udp_receive_sequence.pdf", plot=udp_receive_sequence_plot, width=3.4, height=2.3)
 ### tikz export
 tikz(file = "figs/udp_receive_sequence.tikz", sanitize=TRUE, width=3.4, height=2.3)
@@ -118,7 +118,7 @@ tcp_plot <- ggplot(tcp, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                      text=element_text(size=9)
                    ) +
                    scale_color_brewer(type = "qual", palette = 7) +
-                   labs(x="Packet Size [bytes]", y="Time [ms]")
+                   labs(x="Payload Size [bytes]", y="Time [ms]")
 ### pdf export
 ggsave("figs/tcp_send.pdf", plot=tcp_plot, width=3.4, height=2.3)
 ### tikz export
