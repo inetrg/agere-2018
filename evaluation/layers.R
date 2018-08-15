@@ -1,4 +1,5 @@
 library(tikzDevice)
+require(RColorBrewer)
 
 df <- read.csv("evaluation/layers.csv", sep = ",", skip = 8)
 # Clean empty columns.
@@ -25,6 +26,7 @@ udp_send$name$X1 <- gsub("BM_send<new_basp_message, udp_protocol<ordering<datagr
 udp_send_plot <- ggplot(udp_send, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                  geom_line() +
                  geom_point(aes(shape=name$X1)) +
+                 scale_shape_manual(values = c(0, 1, 2, 3)) +
                  theme_bw() +
                  theme(
                    legend.title = element_blank(),
@@ -59,6 +61,7 @@ udp_receive_single$name$X1 <- gsub("BM_receive_udp_ordering_basp", "Ordering + B
 udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                            geom_line() +
                            geom_point(aes(shape=name$X1)) +
+                           scale_shape_manual(values = c(0, 1, 2, 3)) +
                            theme_bw() +
                            theme(
                              legend.title = element_blank(),
@@ -83,6 +86,7 @@ udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_raw_sequence_late",    "Lat
 udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                                     geom_line() +
                                     geom_point(aes(shape=name$X1)) +
+                                    scale_shape_manual(values = c(15, 16, 17)) +
                                     theme_bw() +
                                     theme(
                                       legend.title = element_blank(),
@@ -104,11 +108,15 @@ tcp <- split(df,df$proto)[['tcp']]
 tcp$name$X1 <- as.character(tcp$name$X1)
 tcp$name$X2 <- as.numeric(as.character(tcp$name$X2))
 # Rename things.
-tcp$name$X1 <- gsub("BM_send<raw_data_message, tcp_protocol<raw>>",         "RAW",  tcp$name$X1)
+tcp$name$X1 <- gsub("BM_send<raw_data_message, tcp_protocol<raw>>",         "Raw",  tcp$name$X1)
 tcp$name$X1 <- gsub("BM_send<new_basp_message, tcp_protocol<stream_basp>>", "BASP", tcp$name$X1)
+
+colors <- brewer.pal(n = 7, "Oranges")[3:9]
+
 tcp_plot <- ggplot(tcp, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                    geom_line() +
                    geom_point(aes(shape=name$X1)) +
+                   scale_shape_manual(values = c(0, 3)) +
                    theme_bw() +
                    theme(
                      legend.title = element_blank(),
@@ -117,11 +125,12 @@ tcp_plot <- ggplot(tcp, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                      legend.box.margin=margin(-10,-10,-10,-10),
                      text=element_text(size=9)
                    ) +
-                   scale_color_brewer(type = "qual", palette = 7) +
+                   # scale_color_brewer(type = "qual", palette = 7) +
+                   scale_colour_manual(values = brewer.pal(n=4, name = "Set2")[-c(2,3)]) + 
                    labs(x="Payload Size [bytes]", y="Time [us]")
 
-basp <- split(tcp,tcp$name$X1)[['basp']]
-raw <- split(tcp,tcp$name$X1)[['raw']]
+basp <- split(tcp,tcp$name$X1)[['BASP']]
+raw <- split(tcp,tcp$name$X1)[['Raw']]
 
 diffs <- basp$real_time - raw$real_time
 
@@ -131,3 +140,4 @@ ggsave("figs/tcp_send.pdf", plot=tcp_plot, width=3.4, height=2.3)
 tikz(file = "figs/tcp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
 tcp_plot
 dev.off()
+
