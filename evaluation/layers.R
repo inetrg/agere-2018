@@ -18,10 +18,10 @@ udp$name$X2 <- as.numeric(as.character(udp$name$X2))
 udp$operation <- data.frame(ifelse(grepl("send", udp$name$X1), "send", "receive"))
 # Get UDP send tests.
 udp_send <- split(udp,udp$operation)[['send']]
-udp_send$name$X1 <- gsub("BM_send<raw_data_message, udp_protocol<raw>>",                     "raw",             udp_send$name$X1)
-udp_send$name$X1 <- gsub("BM_send<raw_data_message, udp_protocol<ordering<raw>>>",           "ordering",        udp_send$name$X1)
-udp_send$name$X1 <- gsub("BM_send<new_basp_message, udp_protocol<datagram_basp>>",           "basp",            udp_send$name$X1)
-udp_send$name$X1 <- gsub("BM_send<new_basp_message, udp_protocol<ordering<datagram_basp>>>", "ordering + basp", udp_send$name$X1)
+udp_send$name$X1 <- gsub("BM_send<raw_data_message, udp_protocol<raw>>",                     "Raw",             udp_send$name$X1)
+udp_send$name$X1 <- gsub("BM_send<raw_data_message, udp_protocol<ordering<raw>>>",           "Ordering",        udp_send$name$X1)
+udp_send$name$X1 <- gsub("BM_send<new_basp_message, udp_protocol<datagram_basp>>",           "BASP",            udp_send$name$X1)
+udp_send$name$X1 <- gsub("BM_send<new_basp_message, udp_protocol<ordering<datagram_basp>>>", "Ordering + BASP", udp_send$name$X1)
 udp_send_plot <- ggplot(udp_send, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                  geom_line() +
                  geom_point(aes(shape=name$X1)) +
@@ -47,15 +47,15 @@ udp_receive <- split(udp,udp$operation)[['receive']]
 udp_receive$sequence <- data.frame(ifelse(grepl("sequence", udp_receive$name$X1), "yes", "no"))
 # Process single results.
 udp_receive_single <- split(udp_receive,udp_receive$sequence)[['no']]
-udp_receive_single$name$X1 <- gsub("BM_receive<raw_data_message, udp_protocol<raw>>",                     "raw",             udp_receive_single$name$X1)
-udp_receive_single$name$X1 <- gsub("BM_receive<raw_data_message, udp_protocol<ordering<raw>>>",           "ordering",        udp_receive_single$name$X1)
-udp_receive_single$name$X1 <- gsub("BM_receive<new_basp_message, udp_protocol<datagram_basp>>",           "basp",            udp_receive_single$name$X1)
-udp_receive_single$name$X1 <- gsub("BM_receive<new_basp_message, udp_protocol<ordering<datagram_basp>>>", "ordering + basp", udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive<raw_data_message, udp_protocol<raw>>",                     "Raw",             udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive<raw_data_message, udp_protocol<ordering<raw>>>",           "Ordering",        udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive<new_basp_message, udp_protocol<datagram_basp>>",           "BASP",            udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive<new_basp_message, udp_protocol<ordering<datagram_basp>>>", "Ordering + BASP", udp_receive_single$name$X1)
 # Had to rename some benchmarks.
-udp_receive_single$name$X1 <- gsub("BM_receive_udp_raw",           "raw",             udp_receive_single$name$X1)
-udp_receive_single$name$X1 <- gsub("BM_receive_udp_ordering_raw",  "ordering",        udp_receive_single$name$X1)
-udp_receive_single$name$X1 <- gsub("BM_receive_udp_basp",          "basp",            udp_receive_single$name$X1)
-udp_receive_single$name$X1 <- gsub("BM_receive_udp_ordering_basp", "ordering + basp", udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive_udp_raw",           "Raw",             udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive_udp_ordering_raw",  "Ordering",        udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive_udp_basp",          "BASP",            udp_receive_single$name$X1)
+udp_receive_single$name$X1 <- gsub("BM_receive_udp_ordering_basp", "Ordering + BASP", udp_receive_single$name$X1)
 udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                            geom_line() +
                            geom_point(aes(shape=name$X1)) +
@@ -77,9 +77,9 @@ dev.off()
 
 # Process sequence results.
 udp_receive_sequence <- split(udp_receive,udp_receive$sequence)[['yes']]
-udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_raw_sequence_inorder", "inorder",  udp_receive_sequence$name$X1)
-udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_raw_sequence_dropped", "dropped", udp_receive_sequence$name$X1)
-udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_raw_sequence_late",    "late", udp_receive_sequence$name$X1)
+udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_raw_sequence_inorder", "Inorder",  udp_receive_sequence$name$X1)
+udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_raw_sequence_dropped", "Dropped", udp_receive_sequence$name$X1)
+udp_receive_sequence$name$X1 <- gsub("BM_receive_udp_raw_sequence_late",    "Late", udp_receive_sequence$name$X1)
 udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                                     geom_line() +
                                     geom_point(aes(shape=name$X1)) +
@@ -104,8 +104,8 @@ tcp <- split(df,df$proto)[['tcp']]
 tcp$name$X1 <- as.character(tcp$name$X1)
 tcp$name$X2 <- as.numeric(as.character(tcp$name$X2))
 # Rename things.
-tcp$name$X1 <- gsub("BM_send<raw_data_message, tcp_protocol<raw>>",         "raw",  tcp$name$X1)
-tcp$name$X1 <- gsub("BM_send<new_basp_message, tcp_protocol<stream_basp>>", "basp", tcp$name$X1)
+tcp$name$X1 <- gsub("BM_send<raw_data_message, tcp_protocol<raw>>",         "RAW",  tcp$name$X1)
+tcp$name$X1 <- gsub("BM_send<new_basp_message, tcp_protocol<stream_basp>>", "BASP", tcp$name$X1)
 tcp_plot <- ggplot(tcp, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                    geom_line() +
                    geom_point(aes(shape=name$X1)) +
@@ -119,6 +119,12 @@ tcp_plot <- ggplot(tcp, aes(x=name$X2, y=real_time / 1000, color=name$X1)) +
                    ) +
                    scale_color_brewer(type = "qual", palette = 7) +
                    labs(x="Payload Size [bytes]", y="Time [ms]")
+
+basp <- split(tcp,tcp$name$X1)[['basp']]
+raw <- split(tcp,tcp$name$X1)[['raw']]
+
+diffs <- basp$real_time - raw$real_time
+
 ### pdf export
 ggsave("figs/tcp_send.pdf", plot=tcp_plot, width=3.4, height=2.3)
 ### tikz export
