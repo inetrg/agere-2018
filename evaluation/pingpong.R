@@ -26,8 +26,9 @@ pp_plot <- ggplot(df, aes(x=loss.percentage, y=avg/1000, color='color')) +
            ) +
            scale_color_brewer(type="qual", palette=7) +
            labs(x="Relative Loss on Link [%]", y="Runtime [s]")
-ggsave("figs/pingpong.pdf", plot=pp_plot, width=3.4, height=2.3)
+#ggsave("figs/pingpong.pdf", plot=pp_plot, width=3.4, height=2.3)
 ### tikz export
 tikz(file="figs/pingpong.tikz", sanitize=TRUE, width=3.4, height=2.3)
 pp_plot
 dev.off()
+
