@@ -40,13 +40,22 @@ struct raw_newb : public io::network::newb<policy::raw_data_message> {
     if (is_client) {
       received_messages += 1;
       if (received_messages % 100 == 0)
-        std::cout << "got " << received_messages << std::endl;
-      if (received_messages >= messages)
+        std::cerr << "got " << received_messages << std::endl;
+      if (received_messages >= messages) {
+        send_shutdown();
         send(this, quit_atom::value);
+      }
       else
         send_message(counter + 1);
     } else {
-      send_message(counter);
+      if (msg.payload_len == 4) {
+        send_message(counter);
+      } else if (msg.payload_len == 8) {
+        uint32_t rest;
+        bd(rest);
+        if (counter == shut && rest == down)
+          send(this, quit_atom::value);
+      }
     }
   }
 
@@ -54,6 +63,13 @@ struct raw_newb : public io::network::newb<policy::raw_data_message> {
     auto whdl = wr_buf(nullptr);
     binary_serializer bs(&backend(), *whdl.buf);
     bs(value);
+  }
+
+  void send_shutdown() {
+    auto whdl = wr_buf(nullptr);
+    binary_serializer bs(&backend(), *whdl.buf);
+    bs(shut);
+    bs(down);
   }
 
   behavior make_behavior() override {
@@ -66,12 +82,12 @@ struct raw_newb : public io::network::newb<policy::raw_data_message> {
         messages = m;
       },
       [=](responder_atom, actor r) {
-        std::cout << "got responder assigned" << std::endl;
+        std::cerr << "got responder assigned" << std::endl;
         responder = r;
         send(r, this);
       },
       [=](quit_atom) {
-        std::cout << "got quit message" << std::endl;
+        std::cerr << "got quit message" << std::endl;
         // Remove from multiplexer loop.
         stop();
         // Quit actor.
@@ -90,6 +106,8 @@ struct raw_newb : public io::network::newb<policy::raw_data_message> {
   actor responder;
   size_t messages;
   uint32_t received_messages;
+  uint32_t shut = 0x73687574;
+  uint32_t down = 0x646f776e;
 };
 
 template <class ProtocolPolicy>
@@ -103,13 +121,13 @@ struct udp_acceptor
   }
 
   ~udp_acceptor() {
-    std::cout << "terminating udp acceptor" << std::endl;
+    std::cerr << "terminating udp acceptor" << std::endl;
   }
 
   expected<actor> create_newb(native_socket sockfd,
                               io::network::transport_policy_ptr pol) override {
     CAF_LOG_TRACE(CAF_ARG(sockfd));
-    std::cout << "creating newb" << std::endl;
+    std::cerr << "creating newb" << std::endl;
     auto n = io::network::make_newb<raw_newb>(this->backend().system(), sockfd);
     auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
     if (ptr == nullptr)
@@ -168,7 +186,7 @@ void caf_main(actor_system& sys, const config& cfg) {
     self->set_default_handler(skip);
     return {
       [=](actor b) {
-        std::cout << "[" << name << "] got broker, let's do this" << std::endl;
+        std::cerr << "[" << name << "] got broker, let's do this" << std::endl;
         self->become(running(self, name, m, b));
         self->set_default_handler(print_and_drop);
       }
@@ -178,7 +196,7 @@ void caf_main(actor_system& sys, const config& cfg) {
   auto dummy_broker = [](io::broker*) -> behavior {
     return {
       [](io::new_connection_msg&) {
-        std::cout << "got new connection" << std::endl;
+        std::cerr << "got new connection" << std::endl;
       }
     };
   };
@@ -190,19 +208,20 @@ void caf_main(actor_system& sys, const config& cfg) {
   auto await_done = [&](std::string msg) {
     self->receive(
       [&](quit_atom) {
-        std::cout << msg << std::endl;
+        std::cerr << msg << std::endl;
       }
     );
   };
   if (cfg.is_server) {
-    std::cout << "creating new server" << std::endl;
+    std::cerr << "creating new server" << std::endl;
     auto server_ptr = make_server_newb<acceptor_t, accept_udp>(sys, port,
                                                                nullptr, true);
+    server_ptr->responder = self;
     // If I don't do this, our newb acceptor will never get events ...
     auto b = sys.middleman().spawn_server(dummy_broker, port + 1);
     await_done("done");
   } else {
-    std::cout << "creating new client" << std::endl;
+    std::cerr << "creating new client" << std::endl;
     auto client = make_client_newb<raw_newb, udp_transport, proto_t>(sys, host,
                                                                      port);
     self->send(client, responder_atom::value, helper);
@@ -212,8 +231,8 @@ void caf_main(actor_system& sys, const config& cfg) {
     await_done("done");
     auto end = system_clock::now();
     std::cout << duration_cast<milliseconds>(end - start).count() << "ms" << std::endl;
-    std::abort();
   }
+  std::abort();
 }
 
 } // namespace anonymous
