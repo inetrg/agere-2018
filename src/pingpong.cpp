@@ -46,9 +46,9 @@ struct raw_newb : public io::network::newb<policy::raw_data_message> {
       if (received_messages >= messages) {
         send_shutdown();
         send(this, quit_atom::value);
-      }
-      else
+      } else {
         send_message(counter + 1);
+      }
     } else {
       if (msg.payload_len == 4) {
         send_message(counter);
