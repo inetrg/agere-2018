@@ -352,3 +352,4 @@ combined_receive_plot <- ggplot(receive_combined, aes(x=size, y=real_time/1000, 
 tikz(file="figs/receive_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
 combined_receive_plot
 dev.off()
+
