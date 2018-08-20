@@ -39,8 +39,10 @@ struct raw_newb : public io::network::newb<policy::raw_data_message> {
     bd(counter);
     if (is_client) {
       received_messages += 1;
-      if (received_messages % 100 == 0)
+      /*
+      if (received_messages % 1000 == 0)
         std::cerr << "got " << received_messages << std::endl;
+      */
       if (received_messages >= messages) {
         send_shutdown();
         send(this, quit_atom::value);
@@ -82,12 +84,12 @@ struct raw_newb : public io::network::newb<policy::raw_data_message> {
         messages = m;
       },
       [=](responder_atom, actor r) {
-        std::cerr << "got responder assigned" << std::endl;
+        // std::cerr << "got responder assigned" << std::endl;
         responder = r;
         send(r, this);
       },
       [=](quit_atom) {
-        std::cerr << "got quit message" << std::endl;
+        // std::cerr << "got quit message" << std::endl;
         // Remove from multiplexer loop.
         stop();
         // Quit actor.
@@ -127,7 +129,7 @@ struct udp_acceptor
   expected<actor> create_newb(native_socket sockfd,
                               io::network::transport_policy_ptr pol) override {
     CAF_LOG_TRACE(CAF_ARG(sockfd));
-    std::cerr << "creating newb" << std::endl;
+    // std::cerr << "creating newb" << std::endl;
     auto n = io::network::make_newb<raw_newb>(this->backend().system(), sockfd);
     auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
     if (ptr == nullptr)
@@ -186,7 +188,7 @@ void caf_main(actor_system& sys, const config& cfg) {
     self->set_default_handler(skip);
     return {
       [=](actor b) {
-        std::cerr << "[" << name << "] got broker, let's do this" << std::endl;
+        // std::cerr << "[" << name << "] got broker, let's do this" << std::endl;
         self->become(running(self, name, m, b));
         self->set_default_handler(print_and_drop);
       }
@@ -213,7 +215,7 @@ void caf_main(actor_system& sys, const config& cfg) {
     );
   };
   if (cfg.is_server) {
-    std::cerr << "creating new server" << std::endl;
+    std::cerr << "creating server" << std::endl;
     auto server_ptr = make_server_newb<acceptor_t, accept_udp>(sys, port,
                                                                nullptr, true);
     server_ptr->responder = self;
@@ -221,7 +223,7 @@ void caf_main(actor_system& sys, const config& cfg) {
     auto b = sys.middleman().spawn_server(dummy_broker, port + 1);
     await_done("done");
   } else {
-    std::cerr << "creating new client" << std::endl;
+    std::cerr << "creating client" << std::endl;
     auto client = make_client_newb<raw_newb, udp_transport, proto_t>(sys, host,
                                                                      port);
     self->send(client, responder_atom::value, helper);
