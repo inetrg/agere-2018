@@ -1,6 +1,7 @@
 library(tikzDevice)
 library(ggplot2)
 require(RColorBrewer)
+require(gridExtra)
 
 df <- read.csv("evaluation/layers.csv", sep=",", skip=8)
 # Clean empty columns.
@@ -260,3 +261,94 @@ tikz(file="figs/tcp_receive.tikz", sanitize=TRUE, width=3.4, height=2.3)
 tcp_receive_plot
 dev.off()
 
+
+#tikz(file="figs/send_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
+#grid.arrange(tcp_send_plot, udp_send_plot, ncol=2)
+#dev.off()
+
+# Create a plot that combines sending data.
+tcp_send_cleaned <- tcp_send[c("benchmark", "size", "real_time", "upper", "lower")]
+udp_send_cleaned <- udp_send[c("benchmark", "size", "real_time", "upper", "lower")]
+tcp_send_cleaned$proto <- 'TCP'
+udp_send_cleaned$proto <- 'UDP'
+
+send_combined <- rbind(tcp_send_cleaned, udp_send_cleaned)
+
+combined_send_plot <- ggplot(send_combined, aes(x=size, y=real_time/1000, color=benchmark)) +
+                             geom_line(size=0.8) +
+                             geom_point(aes(shape=benchmark), stroke=0.8) +
+                             geom_errorbar(
+                               mapping=aes(
+                                 ymin=lower/1000,
+                                 ymax=upper/1000
+                               ),
+                               #size=2,
+                               width=200
+                             ) +
+                             scale_shape_manual(values=c(0, 1, 2, 3)) +
+                             facet_grid(cols=vars(proto)) +
+                             #facet_wrap() +
+                             theme_bw() +
+                             theme(
+                               legend.title=element_blank(),
+                               legend.key=element_rect(fill='white'), 
+                               legend.background=element_rect(fill="white", colour="black", size=0.25),
+                               legend.direction="vertical",
+                               legend.justification=c(0, 1),
+                               legend.position=c(0, 1),
+                               legend.box.margin=margin(c(3, 3, 3, 3)),
+                               legend.key.size=unit(0.8, 'lines'),
+                               text=element_text(size=9),
+                               strip.background=element_blank(),
+                               strip.text.x=element_blank()
+                             ) +
+                             scale_color_brewer(type="qual", palette=7) +
+                             labs(x="Payload Size [bytes]", y="Runtime [us]")
+
+tikz(file="figs/send_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
+combined_send_plot
+dev.off()
+
+
+# Create a plot that combines receiving data.
+tcp_receive_cleaned <- tcp_receive[c("benchmark", "size", "real_time", "upper", "lower")]
+udp_receive_cleaned <- udp_receive_single[c("benchmark", "size", "real_time", "upper", "lower")]
+tcp_receive_cleaned$proto <- 'TCP'
+udp_receive_cleaned$proto <- 'UDP'
+
+receive_combined <- rbind(tcp_receive_cleaned, udp_receive_cleaned)
+
+combined_receive_plot <- ggplot(receive_combined, aes(x=size, y=real_time/1000, color=benchmark)) +
+                                geom_line(size=0.8) +
+                                geom_point(aes(shape=benchmark), stroke=0.8) +
+                                geom_errorbar(
+                                  mapping=aes(
+                                    ymin=lower/1000,
+                                    ymax=upper/1000
+                                  ),
+                                  #size=2,
+                                  width=200
+                                ) +
+                                scale_shape_manual(values=c(0, 1, 2, 3)) +
+                                facet_grid(cols=vars(proto)) +
+                                #facet_wrap() +
+                                theme_bw() +
+                                theme(
+                                  legend.title=element_blank(),
+                                  legend.key=element_rect(fill='white'), 
+                                  legend.background=element_rect(fill="white", colour="black", size=0.25),
+                                  legend.direction="vertical",
+                                  legend.justification=c(0, 1),
+                                  legend.position=c(0, 0.8),
+                                  legend.box.margin=margin(c(3, 3, 3, 3)),
+                                  legend.key.size=unit(0.8, 'lines'),
+                                  text=element_text(size=9),
+                                  strip.background=element_blank(),
+                                  strip.text.x=element_blank()
+                                ) +
+                                scale_color_brewer(type="qual", palette=7) +
+                                labs(x="Payload Size [bytes]", y="Runtime [us]")
+  
+tikz(file="figs/receive_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
+combined_receive_plot
+dev.off()
