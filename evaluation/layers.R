@@ -66,8 +66,8 @@ udp_send_plot <- ggplot(udp_send, aes(x=size, y=real_time / 1000, color=benchmar
                  theme_bw() +
                  theme(
                    legend.title=element_blank(),
-                   legend.key=element_rect(fill='gray96'), 
-                   legend.background=element_rect(fill="gray96"), #, colour="black"),
+                   legend.key=element_rect(fill='white'), 
+                   legend.background=element_rect(fill="white", colour="black", size=0.25),
                    legend.direction="vertical",
                    legend.justification=c(0, 1),
                    legend.position=c(0, 1),
@@ -114,8 +114,8 @@ udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=size, y=real_time / 
                            theme_bw() +
                            theme(
                              legend.title=element_blank(),
-                             legend.key=element_rect(fill='gray96'), 
-                             legend.background=element_rect(fill="gray96"), #, colour="black"),
+                             legend.key=element_rect(fill='white'), 
+                             legend.background=element_rect(fill="white", colour="black", size=0.25),
                              legend.direction="horizontal",
                              legend.justification=c(0,1),
                              legend.position=c(0, 1),
@@ -153,8 +153,8 @@ udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=size, y=real_tim
                                     theme_bw() +
                                     theme(
                                       legend.title=element_blank(),
-                                      legend.key=element_rect(fill='gray96'), 
-                                      legend.background=element_rect(fill="gray96"), #, colour="black"),
+                                      legend.key=element_rect(fill='white'), 
+                                      legend.background=element_rect(fill="white", colour="black", size=0.25),
                                       legend.direction="horizontal",
                                       legend.justification=c(0,1),
                                       legend.position=c(0,1),
@@ -198,8 +198,8 @@ tcp_send_plot <- ggplot(tcp_send, aes(x=size, y=real_time/1000, color=benchmark)
                         theme_bw() +
                         theme(
                           legend.title=element_blank(),
-                          legend.key=element_rect(fill='gray96'), 
-                          legend.background=element_rect(fill="gray96"), #, colour="black"),
+                          legend.key=element_rect(fill='white'), 
+                          legend.background=element_rect(fill="white", colour="black", size=0.25),
                           legend.direction="vertical",
                           legend.justification=c(0, 1),
                           legend.position=c(0, 1),
@@ -243,8 +243,8 @@ tcp_receive_plot <- ggplot(tcp_receive, aes(x=size, y=real_time/1000, color=benc
                            theme_bw() +
                            theme(
                              legend.title=element_blank(),
-                             legend.key=element_rect(fill='gray96'), 
-                             legend.background=element_rect(fill="gray96"), #, colour="black"),
+                             legend.key=element_rect(fill='white'), 
+                             legend.background=element_rect(fill="white", colour="black", size=0.25),
                              legend.direction="horizontal",
                              legend.justification=c(0, 1),
                              legend.position=c(0, 1),
@@ -259,3 +259,4 @@ tcp_receive_plot <- ggplot(tcp_receive, aes(x=size, y=real_time/1000, color=benc
 tikz(file="figs/tcp_receive.tikz", sanitize=TRUE, width=3.4, height=2.3)
 tcp_receive_plot
 dev.off()
+
