@@ -283,7 +283,7 @@ combined_send_plot <- ggplot(send_combined, aes(x=size, y=real_time/1000, color=
                                  ymax=upper/1000
                                ),
                                #size=2,
-                               width=200
+                               width=400
                              ) +
                              scale_shape_manual(values=c(0, 1, 2, 3)) +
                              facet_grid(cols=vars(proto)) +
@@ -327,7 +327,7 @@ combined_receive_plot <- ggplot(receive_combined, aes(x=size, y=real_time/1000, 
                                     ymax=upper/1000
                                   ),
                                   #size=2,
-                                  width=200
+                                  width=400
                                 ) +
                                 scale_shape_manual(values=c(0, 1, 2, 3)) +
                                 facet_grid(cols=vars(proto)) +
