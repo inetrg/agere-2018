@@ -13,5 +13,5 @@ Some measurement related to a new broker concept for CAF. Based on the [CAF](htt
 ## Run Layers Benchmark
 
 ```
-$ ./build/bin/four_udp --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out_format=csv --benchmark_out=evaluation/layers.csv
+$ ./build/bin/layers --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out_format=csv --benchmark_out=evaluation/layers.csv
 ```

@@ -77,7 +77,7 @@ udp_send_plot <- ggplot(udp_send, aes(x=size, y=real_time / 1000, color=benchmar
                  ) +
                  scale_color_brewer(type="qual", palette=7) +
                  labs(x="Payload Size [bytes]", y="Runtime [us]")
-ggsave("figs/udp_send.pdf", plot=udp_send_plot, width=3.4, height=2.3)
+#ggsave("figs/udp_send.pdf", plot=udp_send_plot, width=3.4, height=2.3)
 ### tikz export
 tikz(file="figs/udp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
 udp_send_plot
@@ -126,7 +126,7 @@ udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=size, y=real_time / 
                            ) +
                            scale_color_brewer(type="qual", palette=7) +
                            labs(x="Payload Size [bytes]", y="Runtime [us]")
-ggsave("figs/udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height=2.3)
+#ggsave("figs/udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height=2.3)
 ### tikz export
 tikz(file="figs/udp_receive_single.tikz", sanitize=TRUE, width=3.4, height=2.3)
 udp_receive_single_plot
@@ -165,7 +165,7 @@ udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=size, y=real_tim
                                     ) +
                                     scale_color_brewer(type="qual", palette=7) +
                                     labs(x="Payload Size [bytes]", y="Runtime [us]")
-ggsave("figs/udp_receive_sequence.pdf", plot=udp_receive_sequence_plot, width=3.4, height=2.3)
+#ggsave("figs/udp_receive_sequence.pdf", plot=udp_receive_sequence_plot, width=3.4, height=2.3)
 ### tikz export
 tikz(file="figs/udp_receive_sequence.tikz", sanitize=TRUE, width=3.4, height=2.3)
 udp_receive_sequence_plot
@@ -173,48 +173,89 @@ dev.off()
 
 # Get tcp related data.
 tcp <- split(df,df$proto)[['tcp']]
+
+# Split up by benchmark operation.
+tcp$operation <- data.frame(ifelse(grepl("send", tcp$benchmark), "send", "receive"))
+tcp_send <- split(tcp, tcp$operation)[['send']]
+tcp_receive <- split(tcp, tcp$operation)[['receive']]
+
 # Rename things.
-tcp$benchmark <- gsub("BM_send<raw_data_message, tcp_protocol<raw>>",         "Raw",  tcp$benchmark)
-tcp$benchmark <- gsub("BM_send<new_basp_message, tcp_protocol<stream_basp>>", "BASP", tcp$benchmark)
+tcp_send$benchmark <- gsub("BM_send<raw_data_message, tcp_protocol<raw>>",         "Raw",  tcp_send$benchmark)
+tcp_send$benchmark <- gsub("BM_send<new_basp_message, tcp_protocol<stream_basp>>", "BASP", tcp_send$benchmark)
 
-colors <- brewer.pal(n=7, "Oranges")[3:9]
+tcp_send_plot <- ggplot(tcp_send, aes(x=size, y=real_time/1000, color=benchmark)) +
+                        geom_line(size=0.8) +
+                        geom_point(aes(shape=benchmark), stroke=0.8) +
+                        geom_errorbar(
+                          mapping=aes(
+                            ymin=lower/1000,
+                            ymax=upper/1000
+                          ),
+                          #size=2,
+                          width=200
+                        ) +
+                        scale_shape_manual(values=c(0, 3)) +
+                        theme_bw() +
+                        theme(
+                          legend.title=element_blank(),
+                          legend.key=element_rect(fill='gray96'), 
+                          legend.background=element_rect(fill="gray96"), #, colour="black"),
+                          legend.direction="vertical",
+                          legend.justification=c(0, 1),
+                          legend.position=c(0, 1),
+                          legend.box.margin=margin(c(3, 3, 3, 3)),
+                          legend.key.size=unit(0.8, 'lines'),
+                          text=element_text(size=9)
+                        ) +
+                        # scale_color_brewer(type="qual", palette=7) +
+                        scale_colour_manual(values=brewer.pal(n=4, name="Set2")[-c(2,3)]) + # choose colors to match the other plots
+                        labs(x="Payload Size [bytes]", y="Runtime [us]")
 
-tcp_plot <- ggplot(tcp, aes(x=size, y=real_time/1000, color=benchmark)) +
-                   geom_line(size=0.8) +
-                   geom_point(aes(shape=benchmark), stroke=0.8) +
-                   geom_errorbar(
-                     mapping=aes(
-                       ymin=lower/1000,
-                       ymax=upper/1000
-                     ),
-                     #size=2,
-                     width=200
-                   ) +
-                   scale_shape_manual(values=c(0, 3)) +
-                   theme_bw() +
-                   theme(
-                     legend.title=element_blank(),
-                     legend.key=element_rect(fill='gray96'), 
-                     legend.background=element_rect(fill="gray96"), #, colour="black"),
-                     legend.direction="vertical",
-                     legend.justification=c(0, 1),
-                     legend.position=c(0, 1),
-                     legend.box.margin=margin(c(3, 3, 3, 3)),
-                     legend.key.size=unit(0.8, 'lines'),
-                     text=element_text(size=9)
-                   ) +
-                   # scale_color_brewer(type="qual", palette=7) +
-                   scale_colour_manual(values=brewer.pal(n=4, name="Set2")[-c(2,3)]) + # choose colors to match the other plots
-                   labs(x="Payload Size [bytes]", y="Runtime [us]")
-
+# colors <- brewer.pal(n=7, "Oranges")[3:9]
 #basp <- split(tcp,tcp$benchmark)[['BASP']]
 #raw <- split(tcp,tcp$benchmark)[['Raw']]
 #diffs <- basp$real_time - raw$real_time
 
 ### pdf export
-ggsave("figs/tcp_send.pdf", plot=tcp_plot, width=3.4, height=2.3)
+#ggsave("figs/tcp_send.pdf", plot=tcp_plot, width=3.4, height=2.3)
 ### tikz export
 tikz(file="figs/tcp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
-tcp_plot
+tcp_send_plot
 dev.off()
 
+tcp_receive$benchmark <- gsub("BM_receive_tcp_raw",  "Raw",  tcp_receive$benchmark)
+tcp_receive$benchmark <- gsub("BM_receive_tcp_basp", "BASP", tcp_receive$benchmark)
+
+tcp_receive_plot <- ggplot(tcp_receive, aes(x=size, y=real_time/1000, color=benchmark)) +
+                           geom_line(size=0.8) +
+                           geom_point(aes(shape=benchmark), stroke=0.8) +
+                           geom_errorbar(
+                             mapping=aes(
+                               ymin=lower/1000,
+                               ymax=upper/1000
+                             ),
+                             #size=2,
+                             width=200
+                           ) +
+                           scale_shape_manual(values=c(0, 3)) +
+                           #scale_shape_manual(values=c(0, 1, 2, 3)) +
+                           scale_y_continuous(limits=c(0, 0.35), breaks=seq(0, 0.3, 0.1)) + 
+                           theme_bw() +
+                           theme(
+                             legend.title=element_blank(),
+                             legend.key=element_rect(fill='gray96'), 
+                             legend.background=element_rect(fill="gray96"), #, colour="black"),
+                             legend.direction="horizontal",
+                             legend.justification=c(0, 1),
+                             legend.position=c(0, 1),
+                             legend.box.margin=margin(c(3, 3, 3, 3)),
+                             legend.key.size=unit(0.8, 'lines'),
+                             text=element_text(size=9)
+                           ) +
+                           # scale_color_brewer(type="qual", palette=7) +
+                           scale_colour_manual(values=brewer.pal(n=4, name="Set2")[-c(2,3)]) + # choose colors to match the other plots
+                           labs(x="Payload Size [bytes]", y="Runtime [us]")
+
+tikz(file="figs/tcp_receive.tikz", sanitize=TRUE, width=3.4, height=2.3)
+tcp_receive_plot
+dev.off()

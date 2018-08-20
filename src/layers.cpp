@@ -21,7 +21,7 @@ namespace {
 using ordering_atom = atom_constant<atom("ordering")>;
 
 constexpr auto from = 6;
-constexpr auto to = 14;
+constexpr auto to = 13;
 
 // Receiving is currently datagram only.
 struct dummy_transport : public transport_policy {
@@ -264,11 +264,8 @@ static void BM_receive_impl(benchmark::State& state, bool wseq, bool wsize) {
   ref.transport->receive_buffer = ref.transport->send_buffer;
   for (auto _ : state) {
     ref.received = false;
-    ref.read_event();
-    if (!ref.received) {
-      std::cerr << "Did not receive the expected message!" << std::endl;
-      std::abort();
-    }
+    while (!ref.received)
+      ref.read_event();
   }
 }
 
@@ -288,10 +285,21 @@ static void BM_receive_udp_ordering_basp(benchmark::State& state) {
   BM_receive_impl<new_basp_message, udp_protocol<ordering<datagram_basp>>>(state, true, true);
 }
 
+static void BM_receive_tcp_raw(benchmark::State& state) {
+  BM_receive_impl<raw_data_message, tcp_protocol<raw>>(state, false, false);
+}
+
+static void BM_receive_tcp_basp(benchmark::State& state) {
+  BM_receive_impl<new_basp_message, tcp_protocol<stream_basp>>(state, false, true);
+}
+
 BENCHMARK(BM_receive_udp_raw)->RangeMultiplier(2)->Range(1<<from, 1<<to);
 BENCHMARK(BM_receive_udp_ordering_raw)->RangeMultiplier(2)->Range(1<<from, 1<<to);
 BENCHMARK(BM_receive_udp_basp)->RangeMultiplier(2)->Range(1<<from, 1<<to);
 BENCHMARK(BM_receive_udp_ordering_basp)->RangeMultiplier(2)->Range(1<<from, 1<<to);
+
+BENCHMARK(BM_receive_tcp_raw)->RangeMultiplier(2)->Range(1<<from, 1<<to);
+BENCHMARK(BM_receive_tcp_basp)->RangeMultiplier(2)->Range(1<<from, 1<<to);
 
 // -- ordering -----------------------------------------------------------------
 
