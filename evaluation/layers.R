@@ -1,7 +1,8 @@
 library(tikzDevice)
+library(ggplot2)
 require(RColorBrewer)
 
-df <- read.csv("evaluation/layers.csv", sep = ",", skip = 8)
+df <- read.csv("evaluation/layers.csv", sep=",", skip=8)
 # Clean empty columns.
 emptycols <- sapply(df, function (k) all(is.na(k)))
 df <- df[!emptycols]
@@ -34,6 +35,11 @@ df$proto <- data.frame(ifelse(grepl("tcp", df$benchmark), "tcp", "udp"))
 df$benchmark <- as.character(df$benchmark)
 df$size <- as.numeric(as.character(df$size))
 
+# drop everything > 16384
+df <- df[! (df$size == 16384), ]
+
+df$upper <- df$real_time + df$stddev
+df$lower <- df$real_time - df$stddev
 
 # Get UDP related data.
 udp <- split(df,df$proto)[['udp']]
@@ -46,22 +52,34 @@ udp_send$benchmark <- gsub("BM_send<raw_data_message, udp_protocol<ordering<raw>
 udp_send$benchmark <- gsub("BM_send<new_basp_message, udp_protocol<datagram_basp>>",           "BASP",            udp_send$benchmark)
 udp_send$benchmark <- gsub("BM_send<new_basp_message, udp_protocol<ordering<datagram_basp>>>", "Ordering + BASP", udp_send$benchmark)
 udp_send_plot <- ggplot(udp_send, aes(x=size, y=real_time / 1000, color=benchmark)) +
-                 geom_line() +
-                 geom_point(aes(shape=benchmark)) +
-                 scale_shape_manual(values = c(0, 1, 2, 3)) +
+                 geom_line(size=0.8) +
+                 geom_point(aes(shape=benchmark), stroke=0.8) +
+                 geom_errorbar(
+                   mapping=aes(
+                     ymin=lower / 1000,
+                     ymax=upper / 1000
+                   ),
+                   #size=2,
+                   width=200
+                 ) +
+                 scale_shape_manual(values=c(0, 1, 2, 3)) +
                  theme_bw() +
                  theme(
-                   legend.title = element_blank(),
-                   legend.position = "top",
-                   legend.margin=margin(0,0,0,0),
-                   legend.box.margin=margin(-10,-10,-10,-10),
+                   legend.title=element_blank(),
+                   legend.key=element_rect(fill='gray96'), 
+                   legend.background=element_rect(fill="gray96"), #, colour="black"),
+                   legend.direction="vertical",
+                   legend.justification=c(0, 1),
+                   legend.position=c(0, 1),
+                   legend.box.margin=margin(c(3, 3, 3, 3)),
+                   legend.key.size=unit(0.8, 'lines'),
                    text=element_text(size=9)
                  ) +
-                 scale_color_brewer(type = "qual", palette = 7) +
-                 labs(x="Payload Size [bytes]", y="Time [us]")
+                 scale_color_brewer(type="qual", palette=7) +
+                 labs(x="Payload Size [bytes]", y="Runtime [us]")
 ggsave("figs/udp_send.pdf", plot=udp_send_plot, width=3.4, height=2.3)
 ### tikz export
-tikz(file = "figs/udp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
+tikz(file="figs/udp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
 udp_send_plot
 dev.off()
 
@@ -81,23 +99,36 @@ udp_receive_single$benchmark <- gsub("BM_receive_udp_ordering_raw",  "Ordering",
 udp_receive_single$benchmark <- gsub("BM_receive_udp_basp",          "BASP",            udp_receive_single$benchmark)
 udp_receive_single$benchmark <- gsub("BM_receive_udp_ordering_basp", "Ordering + BASP", udp_receive_single$benchmark)
 udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=size, y=real_time / 1000, color=benchmark)) +
-                           geom_line() +
-                           geom_point(aes(shape=benchmark)) +
-                           scale_shape_manual(values = c(0, 1, 2, 3)) +
-                           scale_y_continuous(limits = c(0, 0.3), breaks = seq(0, 0.3, 0.1)) + 
+                           geom_line(size=0.8) +
+                           geom_point(aes(shape=benchmark), stroke=0.8) +
+                           geom_errorbar(
+                             mapping=aes(
+                               ymin=lower / 1000,
+                               ymax=upper / 1000
+                             ),
+                             #size=2,
+                             width=200
+                           ) +
+                           scale_shape_manual(values=c(0, 1, 2, 3)) +
+                           scale_y_continuous(limits=c(0, 0.35), breaks=seq(0, 0.3, 0.1)) + 
                            theme_bw() +
                            theme(
-                             legend.title = element_blank(),
-                             legend.position = "top",
-                             legend.margin=margin(0,0,0,0),
-                             legend.box.margin=margin(-10,-10,-10,-10),
+                             legend.title=element_blank(),
+                             legend.key=element_rect(fill='gray96'), 
+                             legend.background=element_rect(fill="gray96"), #, colour="black"),
+                             legend.direction="horizontal",
+                             legend.justification=c(0,1),
+                             legend.position=c(0, 1),
+                             #legend.margin=margin(0,0,0,0),
+                             legend.box.margin=margin(c(3,3,3,3)),
+                             legend.key.size=unit(0.8, 'lines'),
                              text=element_text(size=9)
                            ) +
-                           scale_color_brewer(type = "qual", palette = 7) +
-                           labs(x="Payload Size [bytes]", y="Time [us]")
+                           scale_color_brewer(type="qual", palette=7) +
+                           labs(x="Payload Size [bytes]", y="Runtime [us]")
 ggsave("figs/udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height=2.3)
 ### tikz export
-tikz(file = "figs/udp_receive_single.tikz", sanitize=TRUE, width=3.4, height=2.3)
+tikz(file="figs/udp_receive_single.tikz", sanitize=TRUE, width=3.4, height=2.3)
 udp_receive_single_plot
 dev.off()
 
@@ -107,23 +138,36 @@ udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_inorder", "I
 udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_dropped", "Dropped", udp_receive_sequence$benchmark)
 udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_late",    "Late", udp_receive_sequence$benchmark)
 udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=size, y=real_time / 1000, color=benchmark)) +
-                                    geom_line() +
-                                    geom_point(aes(shape=benchmark)) +
-                                    scale_shape_manual(values = c(4, 5, 6)) +
-                                    scale_y_continuous(limits = c(0, 11.2), breaks = seq(0, 10, 2)) + 
+                                    geom_line(size=0.8) +
+                                    geom_point(aes(shape=benchmark), stroke=0.8) +
+                                    geom_errorbar(
+                                      mapping=aes(
+                                        ymin=lower / 1000,
+                                        ymax=upper / 1000
+                                      ),
+                                      #size=2,
+                                      width=200
+                                    ) +
+                                    scale_shape_manual(values=c(4, 5, 6)) +
+                                    scale_y_continuous(limits=c(0, 11.2), breaks=seq(0, 10, 2)) + 
                                     theme_bw() +
                                     theme(
-                                      legend.title = element_blank(),
-                                      legend.position = "top",
-                                      legend.margin=margin(0,0,0,0),
-                                      legend.box.margin=margin(-10,-10,-10,-10),
+                                      legend.title=element_blank(),
+                                      legend.key=element_rect(fill='gray96'), 
+                                      legend.background=element_rect(fill="gray96"), #, colour="black"),
+                                      legend.direction="horizontal",
+                                      legend.justification=c(0,1),
+                                      legend.position=c(0,1),
+                                      #legend.margin=margin(0,0,0,0),
+                                      legend.box.margin=margin(c(3,3,3,3)),
+                                      legend.key.size=unit(0.8, 'lines'),
                                       text=element_text(size=9)
                                     ) +
-                                    scale_color_brewer(type = "qual", palette = 7) +
-                                    labs(x="Payload Size [bytes]", y="Time [us]")
+                                    scale_color_brewer(type="qual", palette=7) +
+                                    labs(x="Payload Size [bytes]", y="Runtime [us]")
 ggsave("figs/udp_receive_sequence.pdf", plot=udp_receive_sequence_plot, width=3.4, height=2.3)
 ### tikz export
-tikz(file = "figs/udp_receive_sequence.tikz", sanitize=TRUE, width=3.4, height=2.3)
+tikz(file="figs/udp_receive_sequence.tikz", sanitize=TRUE, width=3.4, height=2.3)
 udp_receive_sequence_plot
 dev.off()
 
@@ -133,33 +177,44 @@ tcp <- split(df,df$proto)[['tcp']]
 tcp$benchmark <- gsub("BM_send<raw_data_message, tcp_protocol<raw>>",         "Raw",  tcp$benchmark)
 tcp$benchmark <- gsub("BM_send<new_basp_message, tcp_protocol<stream_basp>>", "BASP", tcp$benchmark)
 
-colors <- brewer.pal(n = 7, "Oranges")[3:9]
+colors <- brewer.pal(n=7, "Oranges")[3:9]
 
-tcp_plot <- ggplot(tcp, aes(x=size, y=real_time / 1000, color=benchmark)) +
-                   geom_line() +
-                   geom_point(aes(shape=benchmark)) +
-                   scale_shape_manual(values = c(0, 3)) +
+tcp_plot <- ggplot(tcp, aes(x=size, y=real_time/1000, color=benchmark)) +
+                   geom_line(size=0.8) +
+                   geom_point(aes(shape=benchmark), stroke=0.8) +
+                   geom_errorbar(
+                     mapping=aes(
+                       ymin=lower/1000,
+                       ymax=upper/1000
+                     ),
+                     #size=2,
+                     width=200
+                   ) +
+                   scale_shape_manual(values=c(0, 3)) +
                    theme_bw() +
                    theme(
-                     legend.title = element_blank(),
-                     legend.position = "top",
-                     legend.margin=margin(0,0,0,0),
-                     legend.box.margin=margin(-10,-10,-10,-10),
+                     legend.title=element_blank(),
+                     legend.key=element_rect(fill='gray96'), 
+                     legend.background=element_rect(fill="gray96"), #, colour="black"),
+                     legend.direction="vertical",
+                     legend.justification=c(0, 1),
+                     legend.position=c(0, 1),
+                     legend.box.margin=margin(c(3, 3, 3, 3)),
+                     legend.key.size=unit(0.8, 'lines'),
                      text=element_text(size=9)
                    ) +
-                   # scale_color_brewer(type = "qual", palette = 7) +
-                   scale_colour_manual(values = brewer.pal(n=4, name = "Set2")[-c(2,3)]) + 
-                   labs(x="Payload Size [bytes]", y="Time [us]")
+                   # scale_color_brewer(type="qual", palette=7) +
+                   scale_colour_manual(values=brewer.pal(n=4, name="Set2")[-c(2,3)]) + # choose colors to match the other plots
+                   labs(x="Payload Size [bytes]", y="Runtime [us]")
 
-basp <- split(tcp,tcp$benchmark)[['BASP']]
-raw <- split(tcp,tcp$benchmark)[['Raw']]
-
-diffs <- basp$real_time - raw$real_time
+#basp <- split(tcp,tcp$benchmark)[['BASP']]
+#raw <- split(tcp,tcp$benchmark)[['Raw']]
+#diffs <- basp$real_time - raw$real_time
 
 ### pdf export
 ggsave("figs/tcp_send.pdf", plot=tcp_plot, width=3.4, height=2.3)
 ### tikz export
-tikz(file = "figs/tcp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
+tikz(file="figs/tcp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
 tcp_plot
 dev.off()
 
