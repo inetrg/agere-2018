@@ -53,7 +53,7 @@ udp_send$benchmark <- gsub("BM_send<raw_data_message, udp_protocol<ordering<raw>
 udp_send$benchmark <- gsub("BM_send<new_basp_message, udp_protocol<datagram_basp>>",           "BASP",            udp_send$benchmark)
 udp_send$benchmark <- gsub("BM_send<new_basp_message, udp_protocol<ordering<datagram_basp>>>", "Ordering + BASP", udp_send$benchmark)
 udp_send_plot <- ggplot(udp_send, aes(x=size, y=real_time / 1000, color=benchmark)) +
-                 geom_line(size=0.8) +
+                 geom_line() + # size=0.8) +
                  geom_point(aes(shape=benchmark), stroke=1.3) +
                  geom_errorbar(
                    mapping=aes(
@@ -77,7 +77,7 @@ udp_send_plot <- ggplot(udp_send, aes(x=size, y=real_time / 1000, color=benchmar
                    text=element_text(size=9)
                  ) +
                  scale_color_brewer(type="qual", palette=6) +
-                 labs(x="Payload Size [bytes]", y="Runtime [us]")
+                 labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 #ggsave("figs/udp_send.pdf", plot=udp_send_plot, width=3.4, height=2.3)
 ### tikz export
 tikz(file="figs/udp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
@@ -100,8 +100,8 @@ udp_receive_single$benchmark <- gsub("BM_receive_udp_ordering_raw",  "Ordering",
 udp_receive_single$benchmark <- gsub("BM_receive_udp_basp",          "BASP",            udp_receive_single$benchmark)
 udp_receive_single$benchmark <- gsub("BM_receive_udp_ordering_basp", "Ordering + BASP", udp_receive_single$benchmark)
 udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=size, y=real_time / 1000, color=benchmark)) +
-                           geom_line(size=0.8) +
-                           geom_point(aes(shape=benchmark), stroke=1.3) +
+                           geom_line() + # size=0.8) +
+                           geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
                            geom_errorbar(
                              mapping=aes(
                                ymin=lower / 1000,
@@ -126,7 +126,7 @@ udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=size, y=real_time / 
                              text=element_text(size=9)
                            ) +
                            scale_color_brewer(type="qual", palette=6) +
-                           labs(x="Payload Size [bytes]", y="Runtime [us]")
+                           labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 #ggsave("figs/udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height=2.3)
 ### tikz export
 tikz(file="figs/udp_receive_single.tikz", sanitize=TRUE, width=3.4, height=2.3)
@@ -135,12 +135,12 @@ dev.off()
 
 # Process sequence results.
 udp_receive_sequence <- split(udp_receive,udp_receive$sequence)[['yes']]
-udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_inorder", "Inorder",  udp_receive_sequence$benchmark)
+udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_inorder", "Ordered",  udp_receive_sequence$benchmark)
 udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_dropped", "Dropped", udp_receive_sequence$benchmark)
 udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_late",    "Late", udp_receive_sequence$benchmark)
 udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=size, y=real_time / 1000, color=benchmark)) +
-                                    geom_line(size=0.8) +
-                                    geom_point(aes(shape=benchmark), stroke=1.3) +
+                                    geom_line() + # size=0.8) +
+                                    geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
                                     geom_errorbar(
                                       mapping=aes(
                                         ymin=lower / 1000,
@@ -165,7 +165,7 @@ udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=size, y=real_tim
                                       text=element_text(size=9)
                                     ) +
                                     scale_color_brewer(type="qual", palette=6) +
-                                    labs(x="Payload Size [bytes]", y="Runtime [us]")
+                                    labs(x="Payload Size [bytes]", y="Sequence Handling Time [us]")
 #ggsave("figs/udp_receive_sequence.pdf", plot=udp_receive_sequence_plot, width=3.4, height=2.3)
 ### tikz export
 tikz(file="figs/udp_receive_sequence.tikz", sanitize=TRUE, width=3.4, height=2.3)
@@ -185,8 +185,8 @@ tcp_send$benchmark <- gsub("BM_send<raw_data_message, tcp_protocol<raw>>",      
 tcp_send$benchmark <- gsub("BM_send<new_basp_message, tcp_protocol<stream_basp>>", "BASP", tcp_send$benchmark)
 
 tcp_send_plot <- ggplot(tcp_send, aes(x=size, y=real_time/1000, color=benchmark)) +
-                        geom_line(size=0.8) +
-                        geom_point(aes(shape=benchmark), stroke=1.3) +
+                        geom_line() + # size=0.8) +
+                        geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
                         geom_errorbar(
                           mapping=aes(
                             ymin=lower/1000,
@@ -210,7 +210,7 @@ tcp_send_plot <- ggplot(tcp_send, aes(x=size, y=real_time/1000, color=benchmark)
                         ) +
                         scale_color_brewer(type="qual", palette=6) +
                         #scale_colour_manual(values=brewer.pal(n=4, name="Dark2")[-c(2,3)]) + # choose colors to match the other plots
-                        labs(x="Payload Size [bytes]", y="Runtime [us]")
+                        labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 
 # colors <- brewer.pal(n=7, "Oranges")[3:9]
 #basp <- split(tcp,tcp$benchmark)[['BASP']]
@@ -228,8 +228,8 @@ tcp_receive$benchmark <- gsub("BM_receive_tcp_raw",  "Raw",  tcp_receive$benchma
 tcp_receive$benchmark <- gsub("BM_receive_tcp_basp", "BASP", tcp_receive$benchmark)
 
 tcp_receive_plot <- ggplot(tcp_receive, aes(x=size, y=real_time/1000, color=benchmark)) +
-                           geom_line(size=0.8) +
-                           geom_point(aes(shape=benchmark), stroke=1.3) +
+                           geom_line() + # size=0.8) +
+                           geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
                            geom_errorbar(
                              mapping=aes(
                                ymin=lower/1000,
@@ -255,7 +255,7 @@ tcp_receive_plot <- ggplot(tcp_receive, aes(x=size, y=real_time/1000, color=benc
                            ) +
                            scale_color_brewer(type="qual", palette=6) +
                            #scale_colour_manual(values=brewer.pal(n=4, name="Set1")[-c(2,3)]) + # choose colors to match the other plots
-                           labs(x="Payload Size [bytes]", y="Runtime [us]")
+                           labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 
 tikz(file="figs/tcp_receive.tikz", sanitize=TRUE, width=3.4, height=2.3)
 tcp_receive_plot
@@ -275,8 +275,8 @@ udp_send_cleaned$proto <- 'UDP'
 send_combined <- rbind(tcp_send_cleaned, udp_send_cleaned)
 
 combined_send_plot <- ggplot(send_combined, aes(x=size, y=real_time/1000, color=benchmark)) +
-                             geom_line(size=0.8) +
-                             geom_point(aes(shape=benchmark), stroke=1.3) +
+                             geom_line() + # size=0.8) +
+                             geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
                              geom_errorbar(
                                mapping=aes(
                                  ymin=lower/1000,
@@ -304,7 +304,7 @@ combined_send_plot <- ggplot(send_combined, aes(x=size, y=real_time/1000, color=
                              ) +
                              scale_color_brewer(type="qual", palette=6) +
                              #scale_color_grey() +
-                             labs(x="Payload Size [bytes]", y="Runtime [us]")
+                             labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 
 tikz(file="figs/send_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
 combined_send_plot
@@ -320,8 +320,8 @@ udp_receive_cleaned$proto <- 'UDP'
 receive_combined <- rbind(tcp_receive_cleaned, udp_receive_cleaned)
 
 combined_receive_plot <- ggplot(receive_combined, aes(x=size, y=real_time/1000, color=benchmark)) +
-                                geom_line(size=0.8) +
-                                geom_point(aes(shape=benchmark), stroke=1.3) +
+                                geom_line() + # size=0.8) +
+                                geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
                                 geom_errorbar(
                                   mapping=aes(
                                     ymin=lower/1000,
@@ -348,7 +348,7 @@ combined_receive_plot <- ggplot(receive_combined, aes(x=size, y=real_time/1000, 
                                   strip.text.x=element_blank()
                                 ) +
                                 scale_color_brewer(type="qual", palette=6) +
-                                labs(x="Payload Size [bytes]", y="Runtime [us]")
+                                labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
   
 tikz(file="figs/receive_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
 combined_receive_plot

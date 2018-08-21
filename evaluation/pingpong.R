@@ -62,8 +62,8 @@ ppdf$upper <- ppdf$avg + ppdf$sdev
 ppdf$lower <- ppdf$avg - ppdf$sdev
 
 pp_plot <- ggplot(ppdf, aes(x=loss, y=avg/1000, color=proto)) +
-           geom_line(size=0.8) +
-           geom_point(aes(shape=proto), stroke=1.3) +
+           geom_line() + # size=0.8) +
+           geom_point(aes(shape=proto), size = 2, stroke=0.8) +
            geom_errorbar(
              mapping=aes(
                ymin=lower/1000,
