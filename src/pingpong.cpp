@@ -38,11 +38,11 @@ struct raw_newb : public io::network::newb<policy::raw_data_message> {
     binary_deserializer bd(&backend(), msg.payload, msg.payload_len);
     bd(counter);
     if (is_client) {
+      if (counter != received_messages)
+        return;
       received_messages += 1;
-      /*
-      if (received_messages % 1000 == 0)
+      if (received_messages % 100 == 0)
         std::cerr << "got " << received_messages << std::endl;
-      */
       if (received_messages >= messages) {
         send_shutdown();
         send(this, quit_atom::value);
@@ -168,7 +168,8 @@ public:
 
 void caf_main(actor_system& sys, const config& cfg) {
   using namespace std::chrono;
-  using proto_t = udp_protocol<reliability<ordering<policy::raw>>>;
+  using proto_t = udp_protocol<reliability<policy::raw>>;
+  //using proto_t = udp_protocol<reliability<ordering<policy::raw>>>;
   //using proto_t = udp_protocol<ordering<policy::raw>>;
   using acceptor_t = udp_acceptor<proto_t>;
   const char* host = cfg.host.c_str();

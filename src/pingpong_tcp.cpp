@@ -6,13 +6,16 @@
 #include "caf/logger.hpp"
 #include "caf/policy/newb_tcp.hpp"
 #include "caf/policy/newb_raw.hpp"
+#include "caf/io/broker.hpp"
 
 using namespace caf;
+using namespace caf::io;
 using namespace caf::io::network;
 using namespace caf::policy;
 
 namespace {
 
+using start_atom = atom_constant<atom("start")>;
 using send_atom = atom_constant<atom("send")>;
 using quit_atom = atom_constant<atom("quit")>;
 using responder_atom = atom_constant<atom("responder")>;
@@ -40,22 +43,13 @@ struct basp_newb : public io::network::newb<policy::raw_data_message> {
       if (received_messages % 100 == 0)
         std::cerr << "got " << received_messages << std::endl;
       if (received_messages >= messages) {
-        send_shutdown();
+        std::cout << "got all messages!" << std::endl;
         send(this, quit_atom::value);
       } else {
         send_message(counter + 1);
       }
     } else {
-      if (msg.payload_len == 4) {
-        send_message(counter);
-        if (counter == messages)
-          delayed_send(this, std::chrono::milliseconds(1000), quit_atom::value);
-      } else if (msg.payload_len == 8) {
-        uint32_t rest;
-        bd(rest);
-        if (counter == shut && rest == down)
-          send(this, quit_atom::value);
-      }
+      send_message(counter);
     }
   }
 
@@ -63,13 +57,6 @@ struct basp_newb : public io::network::newb<policy::raw_data_message> {
     auto whdl = wr_buf(nullptr);
     binary_serializer bs(&backend(), *whdl.buf);
     bs(value);
-  }
-
-  void send_shutdown() {
-    auto whdl = wr_buf(nullptr);
-    binary_serializer bs(&backend(), *whdl.buf);
-    bs(shut);
-    bs(down);
   }
 
   behavior make_behavior() override {
@@ -106,8 +93,6 @@ struct basp_newb : public io::network::newb<policy::raw_data_message> {
   actor responder;
   size_t messages;
   uint32_t received_messages;
-  uint32_t shut = 0x73687574;
-  uint32_t down = 0x646f776e;
 };
 
 template <class ProtocolPolicy>
@@ -141,19 +126,94 @@ struct tcp_acceptor
   actor responder;
 };
 
+struct state {
+  actor responder;
+  caf::io::connection_handle other;
+  size_t messages;
+  uint32_t received_messages;
+};
+
+behavior tcp_server(stateful_broker<state>* self) {
+  return {
+    [=](actor responder) {
+      self->state.responder = responder;
+    },
+    [=](const new_connection_msg& msg) {
+      self->configure_read(msg.handle, io::receive_policy::exactly(sizeof(uint32_t)));
+      self->state.other = msg.handle;
+    },
+    [=](new_data_msg& msg) {
+      /*
+      uint32_t counter;
+      binary_deserializer bd(self->system(), msg.buf);
+      bd(counter);
+      */
+      self->write(msg.handle, msg.buf.size(), msg.buf.data());
+      self->flush(msg.handle);
+    },
+    [=](const connection_closed_msg&) {
+      self->quit();
+      self->send(self->state.responder, quit_atom::value);
+    }
+  };
+}
+
+behavior tcp_client(stateful_broker<state>* self, connection_handle hdl) {
+  self->state.other = hdl;
+  return {
+    [=](start_atom, size_t messages, actor responder) {
+      auto& s = self->state;
+      s.responder = responder;
+      s.messages = messages;
+      self->configure_read(s.other, io::receive_policy::exactly(sizeof(uint32_t)));
+      std::vector<char> buf;
+      binary_serializer bs(self->system(), buf);
+      bs(uint32_t(1));
+      self->write(s.other, buf.size(), buf.data());
+      self->flush(s.other);
+    },
+    [=](new_data_msg& msg) {
+      auto& s = self->state;
+      uint32_t counter;
+      binary_deserializer bd(self->system(), msg.buf);
+      bd(counter);
+      s.received_messages += 1;
+      if (s.received_messages % 100 == 0)
+        std::cerr << "got " << s.received_messages << std::endl;
+      if (s.received_messages >= s.messages) {
+        std::cout << "got all messages!" << std::endl;
+        self->send(s.responder, quit_atom::value);
+        self->quit();
+      } else {
+        std::vector<char> buf;
+        binary_serializer bs(self->system(), buf);
+        bs(counter + 1);
+        self->write(msg.handle, buf.size(), buf.data());
+        self->flush(msg.handle);
+      }
+    },
+    [=](const connection_closed_msg&) {
+      self->quit();
+      self->send(self->state.responder, quit_atom::value);
+    }
+  };
+}
+
 class config : public actor_system_config {
 public:
   uint16_t port = 12345;
   std::string host = "127.0.0.1";
   bool is_server = false;
   size_t messages = 10000;
+  bool traditional = false;
 
   config() {
     opt_group{custom_options_, "global"}
     .add(port, "port,P", "set port")
     .add(host, "host,H", "set host")
     .add(is_server, "server,s", "set server")
-    .add(messages, "messages,m", "set number of exchanged messages");
+    .add(messages, "messages,m", "set number of exchanged messages")
+    .add(traditional, "traditional,t", "use traditional style brokers");
   }
 };
 
@@ -204,27 +264,44 @@ void caf_main(actor_system& sys, const config& cfg) {
       }
     );
   };
-  if (cfg.is_server) {
-    std::cerr << "creating new server" << std::endl;
-    auto server_ptr = make_server_newb<acceptor_t, accept_tcp>(sys, port,
-                                                               nullptr, true);
-    server_ptr->responder = self;
-    // If I don't do this, our newb acceptor will never get events ...
-    auto b = sys.middleman().spawn_server(dummy_broker, port + 1);
-    await_done("done");
+  if (!cfg.traditional) {
+    if (cfg.is_server) {
+      std::cerr << "creating new server" << std::endl;
+      auto server_ptr = make_server_newb<acceptor_t, accept_tcp>(sys, port,
+                                                                 nullptr, true);
+      server_ptr->responder = self;
+      // If I don't do this, our newb acceptor will never get events ...
+      auto b = sys.middleman().spawn_server(dummy_broker, port + 1);
+      await_done("done");
+    } else {
+      std::cerr << "creating new client" << std::endl;
+      auto client = make_client_newb<basp_newb, tcp_transport, proto_t>(sys, host,
+                                                                        port);
+      self->send(client, responder_atom::value, helper);
+      self->send(client, config_atom::value, size_t(cfg.messages));
+      auto start = system_clock::now();
+      self->send(client, send_atom::value, uint32_t(0));
+      await_done("done");
+      auto end = system_clock::now();
+      std::cout << duration_cast<milliseconds>(end - start).count() << "ms" << std::endl;
+    }
+    std::abort();
   } else {
-    std::cerr << "creating new client" << std::endl;
-    auto client = make_client_newb<basp_newb, tcp_transport, proto_t>(sys, host,
-                                                                      port);
-    self->send(client, responder_atom::value, helper);
-    self->send(client, config_atom::value, size_t(cfg.messages));
-    auto start = system_clock::now();
-    self->send(client, send_atom::value, uint32_t(0));
-    await_done("done");
-    auto end = system_clock::now();
-    std::cout << duration_cast<milliseconds>(end - start).count() << "ms" << std::endl;
+    if (cfg.is_server) {
+      std::cerr << "creating traditional server" << std::endl;
+      auto es = sys.middleman().spawn_server(tcp_server, port);
+      self->send(*es, actor_cast<actor>(self));
+      await_done("done");
+    } else {
+      std::cerr << "creating traditional client" << std::endl;
+      auto ec = sys.middleman().spawn_client(tcp_client, host, port);
+      auto start = system_clock::now();
+      self->send(*ec, start_atom::value, size_t(cfg.messages), actor_cast<actor>(self));
+      await_done("done");
+      auto end = system_clock::now();
+      std::cout << duration_cast<milliseconds>(end - start).count() << "ms" << std::endl;
+    }
   }
-  std::abort();
 }
 
 } // namespace anonymous
