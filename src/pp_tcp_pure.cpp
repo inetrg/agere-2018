@@ -118,7 +118,7 @@ void caf_main(actor_system& sys, const config& cfg) {
     sa.sin_family = AF_INET;
     sa.sin_addr.s_addr = inet_addr(host);
     sa.sin_port = htons(port);
-    if (bind(socket_fd, (struct sockaddr*)&sa, sizeof(sa)) == -1) {
+    if (::bind(socket_fd, (struct sockaddr*)&sa, sizeof(sa)) == -1) {
       std::cerr << "bind to port '" << port << "', IP address '" << host << "' failed" << std::endl;
       close(socket_fd);
       exit(1);
