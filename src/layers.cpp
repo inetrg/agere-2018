@@ -145,19 +145,11 @@ struct dummy_newb : public newb<Message> {
     CAF_LOG_TRACE("");
   }
 
-  void handle(message_type&) override {
-    CAF_PUSH_AID_FROM_PTR(this);
-    CAF_LOG_TRACE("");
-    received = true;
-  }
-
   behavior make_behavior() override {
     this->set_default_handler(print_and_drop);
     return {
-      // Must be implemented at the moment, will be cought by the broker in a
-      // later implementation.
-      [=](atom_value atm, uint32_t id) {
-        this->protocol->timeout(atm, id);
+      [=](const message_type&) {
+        received = true;
       }
     };
   }

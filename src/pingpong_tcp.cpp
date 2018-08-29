@@ -32,27 +32,6 @@ struct basp_newb : public io::network::newb<policy::raw_data_message> {
     // nop
   }
 
-  void handle(message_type& msg) override {
-    CAF_PUSH_AID_FROM_PTR(this);
-    CAF_LOG_TRACE("");
-    uint32_t counter;
-    binary_deserializer bd(&backend(), msg.payload, msg.payload_len);
-    bd(counter);
-    if (is_client) {
-      received_messages += 1;
-      if (received_messages % 100 == 0)
-        std::cerr << "got " << received_messages << std::endl;
-      if (received_messages >= messages) {
-        std::cout << "got all messages!" << std::endl;
-        send(this, quit_atom::value);
-      } else {
-        send_message(counter + 1);
-      }
-    } else {
-      send_message(counter);
-    }
-  }
-
   void send_message(uint32_t value) {
     auto whdl = wr_buf(nullptr);
     binary_serializer bs(&backend(), *whdl.buf);
@@ -62,6 +41,25 @@ struct basp_newb : public io::network::newb<policy::raw_data_message> {
   behavior make_behavior() override {
     set_default_handler(print_and_drop);
     return {
+      [=](message_type& msg) {
+        CAF_LOG_TRACE("");
+        uint32_t counter;
+        binary_deserializer bd(&backend(), msg.payload, msg.payload_len);
+        bd(counter);
+        if (is_client) {
+          received_messages += 1;
+          if (received_messages % 100 == 0)
+            std::cerr << "got " << received_messages << std::endl;
+          if (received_messages >= messages) {
+            std::cout << "got all messages!" << std::endl;
+            send(this, quit_atom::value);
+          } else {
+            send_message(counter + 1);
+          }
+        } else {
+          send_message(counter);
+        }
+      },
       [=](send_atom, uint32_t value) {
         send_message(value);
       },
@@ -80,11 +78,6 @@ struct basp_newb : public io::network::newb<policy::raw_data_message> {
         // Quit actor.
         quit();
         send(responder, quit_atom::value);
-      },
-      // Must be implemented at the moment, will be cought by the broker in a
-      // later implementation.
-      [=](atom_value atm, uint32_t id) {
-        protocol->timeout(atm, id);
       },
     };
   }

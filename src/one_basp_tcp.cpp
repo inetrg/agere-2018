@@ -42,26 +42,19 @@ struct basp_newb : public io::network::newb<policy::new_basp_message> {
     CAF_LOG_TRACE("");
   }
 
-  void handle(message_type& msg) override {
-    CAF_PUSH_AID_FROM_PTR(this);
-    CAF_LOG_TRACE("");
-    if (msg.payload_len == 1) {
-      // nop
-    } else {
-      received_messages += 1;
-      if (received_messages % 1000 == 0)
-        std::cout << "received " << received_messages << " messages" << std::endl;
-      // nop
-    }
-  }
-
   behavior make_behavior() override {
     set_default_handler(print_and_drop);
     return {
-      // Must be implemented at the moment, will be cought by the broker in a
-      // later implementation.
-      [=](atom_value atm, uint32_t id) {
-        protocol->timeout(atm, id);
+      [=](message_type& msg) {
+        CAF_LOG_TRACE("");
+        if (msg.payload_len == 1) {
+          // nop
+        } else {
+          received_messages += 1;
+          if (received_messages % 1000 == 0)
+            std::cout << "received " << received_messages << " messages" << std::endl;
+          // nop
+        }
       },
       [=](send_atom, char c) {
         if (running) {
