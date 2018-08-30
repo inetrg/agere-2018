@@ -27,6 +27,7 @@ namespace policy {
 
 struct closure_t {
     bool connected = false;
+    std::shared_ptr<io::network::byte_buffer> buffer;
 };
 
 struct quic_transport : public io::network::transport_policy {
@@ -62,6 +63,7 @@ struct quic_transport : public io::network::transport_policy {
 
   // connection state
   mozquic_connection_t* connection;
+  closure_t* closure;
 };
 
 struct accept_quic : public io::network::accept_policy {
