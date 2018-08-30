@@ -16,9 +16,9 @@
  * http://www.boost.org/LICENSE_1_0.txt.                                      *
  ******************************************************************************/
 
-#include "caf/policy/newb_quic.hpp"
 #include "caf/config.hpp"
 #include "MozQuic.h"
+#include "../caf/policy/newb_quic.hpp"
 
 #ifdef CAF_WINDOWS
 # ifndef WIN32_LEAN_AND_MEAN
@@ -165,47 +165,59 @@ void quic_transport::flush(io::network::event_handler* parent) {
   }
 }
 
-// hier anfangen ---------------------------------------------------------------
-int connEventCB(void *closure, uint32_t event, void *param) {
+int connEventCB(void* closure, uint32_t event, void* param) {
   switch (event) {
-    case MOZQUIC_EVENT_CONNECTED:
-      std::cout << "connected!" << std::endl;
+    case MOZQUIC_EVENT_0RTT_POSSIBLE:
+      std::cout << "0RTT possible" << std::endl;
       break;
-    case MOZQUIC_EVENT_NEW_STREAM_DATA: {
-      char buf[1024];
-      uint32_t received = 0;
-      int fin = 0;
-      mozquic_stream_t *stream = param;
-      int id = mozquic_get_streamid(stream);
-      if (id >= 128) {
-        return MOZQUIC_ERR_GENERAL;
-      }
-      // TODO: data has to be received and passed here
+    case MOZQUIC_EVENT_CONNECTED: {
+      auto clo = static_cast<closure_t *>(closure);
+      clo->connected = true;
+      std::cout << "client connected" << std::endl;
+      break;
     }
-      break;
 
-    case MOZQUIC_EVENT_ACCEPT_NEW_CONNECTION:
-      return mozquic_set_event_callback(param, connEventCB);
+    case MOZQUIC_EVENT_NEW_STREAM_DATA: {
+      mozquic_stream_t *stream = param;
+      if (mozquic_get_streamid(stream) & 0x3) {
+        std::cerr << "ignore data on streams 0-3" << std::endl;
+        break;
+      }
+
+      char buf[1024];
+      uint32_t amt = 0;
+      int fin = 0;
+      do {
+        memset(buf, 0, 1024);
+        int code = mozquic_recv(stream, buf, 1023, &amt, &fin);
+        if (code != MOZQUIC_OK) {
+          break;
+        }
+        std::cout << buf << std::endl; // why double newline?!
+      } while(amt > 0 && !fin);
+      break;
+    }
 
     case MOZQUIC_EVENT_CLOSE_CONNECTION:
     case MOZQUIC_EVENT_ERROR:
-      return mozquic_destroy_connection(param);
+      // todo: delete closure. memoryleak!
+      mozquic_destroy_connection(param);
+      break;
 
     default:
       break;
   }
+
   return MOZQUIC_OK;
 }
 
 expected<io::network::native_socket>
 quic_transport::connect(const std::string& host, uint16_t port,
-                       optional<io::network::protocol::network> preferred) {
+                       optional<io::network::protocol::network>) {
   // check for nss_config
   char nss_config[] = "/home/jakob/CLionProjects/mozquic_example/nss-config/";
   if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
-    std::cout << "MOZQUIC_NSS_CONFIG FAILURE [" << nss_config << "]"
-              << std::endl;
-    exit(-1);
+    return io::network::invalid_native_socket;
   }
 
   mozquic_config_t config = {};
@@ -221,8 +233,10 @@ quic_transport::connect(const std::string& host, uint16_t port,
   mozquic_unstable_api1(&config, "maxSizeAllowed", 1452, nullptr);
   mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr);
   // open new connections
+  auto clo = new closure_t;
   mozquic_new_connection(&connection, &config);
   mozquic_set_event_callback(connection, connEventCB);
+  mozquic_set_event_callback_closure(connection, clo);
   mozquic_start_client(connection);
 
   uint32_t i=0;
@@ -233,19 +247,19 @@ quic_transport::connect(const std::string& host, uint16_t port,
       fprintf(stderr,"IO reported failure\n");
       break;
     }
-  } while (++i < 2000);
+  } while (++i < 2000 && !clo->connected);
 
   return mozquic_osfd(connection);
 }
 
 expected<io::network::native_socket>
-accept_quic::create_socket(uint16_t port, const char* host, bool reuse) {
-  return -1; // why no INVALID_SOCKET?
+accept_quic::create_socket(uint16_t, const char*, bool) {
+  return io::network::invalid_native_socket;
 }
 
 std::pair<io::network::native_socket, io::network::transport_policy_ptr>
-accept_quic::accept(caf::io::network::event_handler *parent) {
-  return {};
+accept_quic::accept(caf::io::network::event_handler*) {
+  return {io::network::invalid_native_socket, nullptr};
 }
 
 void accept_quic::init(io::network::newb_base& n) {

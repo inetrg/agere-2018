@@ -25,6 +25,10 @@
 namespace caf {
 namespace policy {
 
+struct closure_t {
+    bool connected = false;
+};
+
 struct quic_transport : public io::network::transport_policy {
   quic_transport();
 
