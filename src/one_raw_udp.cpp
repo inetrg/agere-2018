@@ -91,6 +91,8 @@ struct raw_newb : public io::network::newb<policy::raw_data_message> {
         send(r, this);
       },
       [=](interval_atom) {
+        // TODO: reimplement this with other count method.
+        /*
         if (running) {
           delayed_send(this, std::chrono::seconds(1), interval_atom::value);
           data.emplace_back(interval,
@@ -117,13 +119,9 @@ struct raw_newb : public io::network::newb<policy::raw_data_message> {
               std::cerr << ", " << v;
             std::cerr << std::endl;
           }
-          /*
-          for (auto& t : data)
-            std::cerr << (1000000 / get<0>(t).count()) << ", "
-                      << get<1>(t) << ", " << get<2>(t) << std::endl;
-          */
           send(this, quit_atom::value);
         }
+        */
       },
       [=](quit_atom) {
         std::cout << "got quit message" << std::endl;

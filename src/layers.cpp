@@ -38,7 +38,7 @@ struct dummy_transport : public transport_policy {
     // nop
   }
 
-  inline error read_some(event_handler* parent) override {
+  inline rw_state read_some(newb_base* parent) override {
     received_bytes = payload_len;
     stream_serializer<charbuf> out{&parent->backend(),
                                    receive_buffer.data(),
@@ -52,14 +52,14 @@ struct dummy_transport : public transport_policy {
       out(upayload_len);
       received_bytes += caf::policy::basp_header_len;
     }
-    return none;
+    return rw_state::success;
   }
 
   inline bool should_deliver() override {
     return true;
   }
 
-  void prepare_next_read(event_handler*) override {
+  void prepare_next_read(newb_base*) override {
     received_bytes = 0;
     receive_buffer.resize(maximum);
   }
@@ -68,17 +68,16 @@ struct dummy_transport : public transport_policy {
     // nop
   }
 
-  inline error write_some(event_handler* parent) override {
+  inline rw_state write_some(newb_base* parent) override {
     written += send_sizes.front();
     send_sizes.pop_front();
     auto remaining = send_buffer.size() - written;
-    count += 1;
     if (remaining == 0)
       prepare_next_write(parent);
-    return none;
+    return rw_state::success;
   }
 
-  void prepare_next_write(event_handler*) override {
+  void prepare_next_write(newb_base*) override {
     written = 0;
     send_buffer.clear();
     send_sizes.clear();
@@ -103,7 +102,7 @@ struct dummy_transport : public transport_policy {
     return offline_buffer;
   }
 
-  void flush(event_handler* parent) override {
+  void flush(newb_base* parent) override {
     if (!offline_buffer.empty() && !writing) {
       writing = true;
       prepare_next_write(parent);
@@ -295,7 +294,6 @@ BENCHMARK(BM_receive_tcp_basp)->RangeMultiplier(2)->Range(1<<from, 1<<to);
 
 // -- ordering -----------------------------------------------------------------
 
-
 enum instruction : int {
   next,
   skip,
@@ -314,7 +312,7 @@ struct dummy_ordering_transport : public transport_policy {
     // nop
   }
 
-  inline error read_some(event_handler* parent) override {
+  inline rw_state read_some(newb_base* parent) override {
     stream_serializer<charbuf> out{&parent->backend(),
                                    receive_buffer.data(),
                                    sizeof(next_seq)};
@@ -340,14 +338,14 @@ struct dummy_ordering_transport : public transport_policy {
       index = 0;
     else
       index += 1;
-    return none;
+    return rw_state::success;
   }
 
   inline bool should_deliver() override {
     return true;
   }
 
-  void prepare_next_read(event_handler*) override {
+  void prepare_next_read(newb_base*) override {
     received_bytes = 0;
     receive_buffer.resize(maximum);
   }
@@ -356,17 +354,16 @@ struct dummy_ordering_transport : public transport_policy {
     // nop
   }
 
-  inline error write_some(event_handler* parent) override {
+  inline rw_state write_some(newb_base* parent) override {
     written += send_sizes.front();
     send_sizes.pop_front();
     auto remaining = send_buffer.size() - written;
-    count += 1;
     if (remaining == 0)
       prepare_next_write(parent);
-    return none;
+    return rw_state::success;
   }
 
-  void prepare_next_write(event_handler*) override {
+  void prepare_next_write(newb_base*) override {
     written = 0;
     send_buffer.clear();
     send_sizes.clear();
@@ -391,7 +388,7 @@ struct dummy_ordering_transport : public transport_policy {
     return offline_buffer;
   }
 
-  void flush(event_handler* parent) override {
+  void flush(newb_base* parent) override {
     if (!offline_buffer.empty() && !writing) {
       writing = true;
       prepare_next_write(parent);

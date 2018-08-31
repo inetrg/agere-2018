@@ -10,6 +10,7 @@
 #include "caf/policy/newb_udp.hpp"
 
 using namespace caf;
+using namespace caf::io;
 using namespace caf::io::network;
 using namespace caf::policy;
 
@@ -91,6 +92,11 @@ struct raw_newb : public io::network::newb<policy::raw_data_message> {
         // Remove from multiplexer loop.
         stop();
         // Quit actor.
+        quit();
+        send(responder, quit_atom::value);
+      },
+      [=](const io_error_msg& msg) {
+        std::cerr << "io_error: " << to_string(msg.op) << std::endl;
         quit();
         send(responder, quit_atom::value);
       }

@@ -79,6 +79,11 @@ struct basp_newb : public io::network::newb<policy::raw_data_message> {
         quit();
         send(responder, quit_atom::value);
       },
+      [=](const io_error_msg& msg) {
+        std::cerr << "io_error: " << to_string(msg.op) << std::endl;
+        quit();
+        send(responder, quit_atom::value);
+      }
     };
   }
 
