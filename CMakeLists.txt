@@ -78,7 +78,7 @@ if (BENCHMARK_FOUND)
 endif ()
 
 if (NOT MOZQUIC_ROOT_DIR)
-    set(MOZQUIC_ROOT_DIR "/home/jakob/CLionProjects/mozquic/")
+    set(MOZQUIC_ROOT_DIR "/home/boss/Desktop/mozilla/mozquic/")
 endif ()
 find_package(Mozquic)
 if (MOZQUIC_FOUND)

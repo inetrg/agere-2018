@@ -6,7 +6,7 @@
 #include "caf/io/network/newb.hpp"
 #include "caf/logger.hpp"
 #include "caf/policy/newb_raw.hpp"
-#include "caf/policy/newb_quic.hpp"
+#include "../caf/policy/newb_quic.hpp"
 
 using namespace caf;
 
@@ -75,6 +75,8 @@ namespace {
                       send(r, this);
                   },
                   [=](interval_atom) {
+                      // Reimplement this with other count method.
+                      /*
                       if (running) {
                         delayed_send(this, std::chrono::seconds(1), interval_atom::value);
                         data.emplace_back(interval,
@@ -103,6 +105,7 @@ namespace {
                         }
                         send(this, quit_atom::value);
                       }
+                      */
                   },
                   [=](quit_atom) {
                       std::cout << "got quit message" << std::endl;
@@ -157,8 +160,8 @@ namespace {
 
     class config : public actor_system_config {
     public:
-        uint16_t port = 12345;
-        std::string host = "127.0.0.1";
+        uint16_t port = 4434;
+        std::string host = "localhost";
         bool is_server = false;
 
         config() {
@@ -226,7 +229,8 @@ namespace {
       };
       if (cfg.is_server) {
         std::cout << "creating new server" << std::endl;
-        auto server_ptr = make_server_newb<acceptor_t, accept_quic>(sys, port, nullptr,
+        auto server_ptr = make_server_newb<acceptor_t, accept_quic>(sys, port,
+                nullptr,
                                                                    true);
         // If I don't do this, our newb acceptor will never get events ...
         auto b = sys.middleman().spawn_server(dummy_broker, port + 1);
