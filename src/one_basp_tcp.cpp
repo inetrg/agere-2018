@@ -79,6 +79,8 @@ struct basp_newb : public io::network::newb<policy::new_basp_message> {
         send(r, this);
       },
       [=](interval_atom) {
+        // TODO: Reimplement this with other count method.
+        /*
         if (running) {
           delayed_send(this, std::chrono::seconds(1), interval_atom::value);
           interval_counter += 1;
@@ -108,6 +110,7 @@ struct basp_newb : public io::network::newb<policy::new_basp_message> {
           }
           send(this, quit_atom::value);
         }
+        */
       },
       [=](quit_atom) {
         std::cout << "got quit message" << std::endl;
