@@ -21,8 +21,8 @@ using quit_atom = atom_constant<atom("quit")>;
 using responder_atom = atom_constant<atom("responder")>;
 using config_atom = atom_constant<atom("config")>;
 
-struct basp_newb : public io::network::newb<policy::raw_data_message> {
-  using message_type = policy::raw_data_message;
+struct basp_newb : public io::network::newb<policy::new_raw_msg> {
+  using message_type = policy::new_raw_msg;
 
   basp_newb(caf::actor_config& cfg, default_multiplexer& dm,
             native_socket sockfd)

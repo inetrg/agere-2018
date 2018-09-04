@@ -208,18 +208,18 @@ static void BM_send(benchmark::State& state) {
   }
 }
 
-BENCHMARK_TEMPLATE(BM_send, raw_data_message, tcp_protocol<raw>)
+BENCHMARK_TEMPLATE(BM_send, new_raw_msg, tcp_protocol<raw>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
-BENCHMARK_TEMPLATE(BM_send, new_basp_message, tcp_protocol<stream_basp>)
+BENCHMARK_TEMPLATE(BM_send, new_basp_msg, tcp_protocol<stream_basp>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
 
-BENCHMARK_TEMPLATE(BM_send, raw_data_message, udp_protocol<raw>)
+BENCHMARK_TEMPLATE(BM_send, new_raw_msg, udp_protocol<raw>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
-BENCHMARK_TEMPLATE(BM_send, raw_data_message, udp_protocol<ordering<raw>>)
+BENCHMARK_TEMPLATE(BM_send, new_raw_msg, udp_protocol<ordering<raw>>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
-BENCHMARK_TEMPLATE(BM_send, new_basp_message, udp_protocol<datagram_basp>)
+BENCHMARK_TEMPLATE(BM_send, new_basp_msg, udp_protocol<datagram_basp>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
-BENCHMARK_TEMPLATE(BM_send, new_basp_message, udp_protocol<ordering<datagram_basp>>)
+BENCHMARK_TEMPLATE(BM_send, new_basp_msg, udp_protocol<ordering<datagram_basp>>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
 
 // -- receiving ----------------------------------------------------------------
@@ -261,27 +261,27 @@ static void BM_receive_impl(benchmark::State& state, bool wseq, bool wsize) {
 }
 
 static void BM_receive_udp_raw(benchmark::State& state) {
-  BM_receive_impl<raw_data_message, udp_protocol<raw>>(state, false, false);
+  BM_receive_impl<new_raw_msg, udp_protocol<raw>>(state, false, false);
 }
 
 static void BM_receive_udp_ordering_raw(benchmark::State& state) {
-  BM_receive_impl<raw_data_message, udp_protocol<ordering<raw>>>(state, true, false);
+  BM_receive_impl<new_raw_msg, udp_protocol<ordering<raw>>>(state, true, false);
 }
 
 static void BM_receive_udp_basp(benchmark::State& state) {
-  BM_receive_impl<new_basp_message, udp_protocol<datagram_basp>>(state, false, true);
+  BM_receive_impl<new_basp_msg, udp_protocol<datagram_basp>>(state, false, true);
 }
 
 static void BM_receive_udp_ordering_basp(benchmark::State& state) {
-  BM_receive_impl<new_basp_message, udp_protocol<ordering<datagram_basp>>>(state, true, true);
+  BM_receive_impl<new_basp_msg, udp_protocol<ordering<datagram_basp>>>(state, true, true);
 }
 
 static void BM_receive_tcp_raw(benchmark::State& state) {
-  BM_receive_impl<raw_data_message, tcp_protocol<raw>>(state, false, false);
+  BM_receive_impl<new_raw_msg, tcp_protocol<raw>>(state, false, false);
 }
 
 static void BM_receive_tcp_basp(benchmark::State& state) {
-  BM_receive_impl<new_basp_message, tcp_protocol<stream_basp>>(state, false, true);
+  BM_receive_impl<new_basp_msg, tcp_protocol<stream_basp>>(state, false, true);
 }
 
 BENCHMARK(BM_receive_udp_raw)->RangeMultiplier(2)->Range(1<<from, 1<<to);
@@ -421,7 +421,7 @@ struct dummy_ordering_transport : public transport_policy {
 
 // Deliver a sequence of message all inorder.
 static void BM_receive_udp_raw_sequence_inorder(benchmark::State& state) {
-  using newb_t = dummy_newb<raw_data_message>;
+  using newb_t = dummy_newb<new_raw_msg>;
   using proto_t = udp_protocol<ordering<raw>>;
   no_clock_config cfg;
   actor_system sys{cfg};
@@ -483,7 +483,7 @@ BENCHMARK(BM_receive_udp_raw_sequence_inorder)->RangeMultiplier(2)->Range(1<<fro
 
 // Deliver a sequence of messages with one message missing.
 static void BM_receive_udp_raw_sequence_dropped(benchmark::State& state) {
-  using newb_t = dummy_newb<raw_data_message>;
+  using newb_t = dummy_newb<new_raw_msg>;
   using proto_t = udp_protocol<ordering<raw>>;
   no_clock_config cfg;
   actor_system sys{cfg};
@@ -553,7 +553,7 @@ BENCHMARK(BM_receive_udp_raw_sequence_dropped)->RangeMultiplier(2)->Range(1<<fro
 
 // Deliver a sequence of messages with one delivered out of order.
 static void BM_receive_udp_raw_sequence_late(benchmark::State& state) {
-  using newb_t = dummy_newb<raw_data_message>;
+  using newb_t = dummy_newb<new_raw_msg>;
   using proto_t = udp_protocol<ordering<raw>>;
   no_clock_config cfg;
   actor_system sys{cfg};

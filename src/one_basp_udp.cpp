@@ -30,8 +30,8 @@ using handshake_atom = atom_constant<atom("handshake")>;
 constexpr size_t chunk_size = 8192; //8192; //128; //1024;
 
 
-struct raw_newb : public io::network::newb<new_basp_message> {
-  using message_type = new_basp_message;
+struct raw_newb : public io::network::newb<new_basp_msg> {
+  using message_type = new_basp_msg;
 
   raw_newb(caf::actor_config& cfg, default_multiplexer& dm,
             native_socket sockfd)
