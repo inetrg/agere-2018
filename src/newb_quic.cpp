@@ -72,19 +72,16 @@ quic_transport::quic_transport()
 }
 
 io::network::rw_state quic_transport::read_some
-(io::network::newb_base* parent) {
+(io::network::newb_base*) {
   CAF_LOG_TRACE("");
-  size_t len = receive_buffer.size() - collected;
-  void* buf = receive_buffer.data() + collected;
-  auto sres = ::recv(parent->fd(),
-                     reinterpret_cast<io::network::socket_recv_ptr>(buf),
-                     len, io::network::no_sigpipe_io_flag);
-  if (io::network::is_error(sres, true) || sres == 0) {
+  int res = mozquic_IO(connection);
+  if (res != MOZQUIC_OK) {
     // Recv returns 0 when the peer has performed an orderly shutdown.
-    CAF_LOG_DEBUG("recv failed" << CAF_ARG(sres));
+    CAF_LOG_DEBUG("recv failed");
     return io::network::rw_state::failure;
   }
-  size_t result = (sres > 0) ? static_cast<size_t>(sres) : 0;
+  size_t result = (closure->amount_read > 0) ?
+          static_cast<size_t>(closure->amount_read) : 0;
   collected += result;
   received_bytes = collected;
   return io::network::rw_state::success;
@@ -128,21 +125,17 @@ void quic_transport::configure_read(io::receive_policy::config config) {
 io::network::rw_state quic_transport::write_some(io::network::newb_base*
 parent) {
   CAF_LOG_TRACE("");
-  const void* buf = send_buffer.data() + written;
-  auto len = send_buffer.size() - written;
-  auto sres = ::send(parent->fd(),
-                     reinterpret_cast<io::network::socket_send_ptr>(buf),
-                     len, io::network::no_sigpipe_io_flag);
-  if (io::network::is_error(sres, true)) {
-    CAF_LOG_ERROR("send failed"
-                          << CAF_ARG(io::network::last_socket_error_as_string()));
+  mozquic_stream_t* stream;
+  char msg[] = "";
+  mozquic_start_new_stream(&stream, connection, 0, 0, msg, 0, 0);
+  const void* buf = send_buffer.data();
+  int res = mozquic_send(stream, const_cast<void*>(buf),
+          static_cast<uint32_t>(send_buffer.size()), 0);
+  if (res != MOZQUIC_OK) {
+    CAF_LOG_ERROR("send failed");
     return io::network::rw_state::failure;
   }
-  size_t result = (sres > 0) ? static_cast<size_t>(sres) : 0;
-  written += result;
-  auto remaining = send_buffer.size() - written;
-  if (remaining == 0)
-    prepare_next_write(parent);
+  prepare_next_write(parent);
   return io::network::rw_state::success;
 }
 
@@ -174,25 +167,28 @@ int connEventCB(void* closure, uint32_t event, void* param) {
     case MOZQUIC_EVENT_CONNECTED: {
       auto clo = static_cast<closure_t *>(closure);
       clo->connected = true;
-      std::cout << "connected" << std::endl;
       break;
     }
 
     case MOZQUIC_EVENT_NEW_STREAM_DATA: {
       mozquic_stream_t *stream = param;
-      if (mozquic_get_streamid(stream) & 0x3) {
+      if (mozquic_get_streamid(stream) & 0x3)
         break;
-      }
 
-      char buf[1024];
-      uint32_t amt = 0;
+      auto clo = static_cast<closure_t*>(closure);
+      uint32_t received = 0;
       int fin = 0;
+      (*clo->buffer).resize(1024); // allocate enough space for reading in
+                                   // the buffer
       do {
-        int code = mozquic_recv(stream, buf, 1023, &amt, &fin);
-        if (code != MOZQUIC_OK) {
-          break;
-        }
-      } while(amt > 0 && !fin);
+        int code = mozquic_recv(stream, (*clo->buffer).data() + clo->amount_read,
+                1024,
+                &received,
+                &fin);
+        if (code != MOZQUIC_OK)
+          return code;
+        clo->amount_read += received; // gather amount that was read
+      } while(received > 0 && !fin);
       break;
     }
 
@@ -258,12 +254,13 @@ quic_transport::connect(const std::string& host, uint16_t port,
 
 expected<io::network::native_socket>
 accept_quic::create_socket(uint16_t, const char*, bool) {
-  std::cout << "create socket called" << std::endl;
+  // nop
   return io::network::invalid_native_socket;
 }
 
 std::pair<io::network::native_socket, io::network::transport_policy_ptr>
 accept_quic::accept(io::network::newb_base*) {
+  // nop
   return {io::network::invalid_native_socket, nullptr};
 }
 

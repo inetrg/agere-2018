@@ -28,6 +28,7 @@ namespace policy {
 struct closure_t {
   bool connected = false;
   std::shared_ptr<io::network::byte_buffer> buffer;
+  int amount_read;
 };
 
 struct quic_transport : public io::network::transport_policy {
