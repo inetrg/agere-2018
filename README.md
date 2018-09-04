@@ -4,7 +4,7 @@ Some measurement related to a new broker concept for CAF. Based on the [CAF](htt
 
 ## Requirements
 
-* CAF (commit: 3fb64b7)
+* CAF (commit: 8d177d9)
 * [Google Benchmark](https://github.com/google/benchmark)
 * Cmake
 * C++ compiler
