@@ -74,6 +74,11 @@ def get_info(host):
     print('running: "{}"'.format(command))
     host.cmdPrint(command)
 
+def set_min_rto(host, timeout):
+    command = '10.0.0.0/8 dev {}-eth0 proto kernel scope link src {} rto_min {}ms'.format(host.name, host.IP(), timeout)
+    print('running: "{}"'.format(command))
+    host.cmdPrint(command)
+
 def main():
     delay = 0
     for loss in range(0, 11):
@@ -86,10 +91,12 @@ def main():
             h1 = net.get('h1')
             set_delay(h1, delay)
             set_loss(h1, loss)
+            set_min_rto(h1, 40)
             # get_info(h1) # does not print anything ...
             h2 = net.get('h2')
             set_delay(h2, delay)
             set_loss(h2, loss)
+            set_min_rto(h2, 40)
             # get_info(h2)
 
             files = {}
@@ -102,12 +109,12 @@ def main():
             caf_opts = '--scheduler.max-threads=1'
 
             print("starting server")
-            servercommand = '../build/bin/pingpong -s --host=\\"{}\\" {}'.format(h1.IP(), caf_opts)
+            servercommand = '../build/bin/pingpong_tcp -s --host=\\"{}\\" {}'.format(h1.IP(), caf_opts)
             print(servercommand)
             p1 = h1.popen(servercommand, shell=True, universal_newlines=True, stdout=serverout, stderr=servererr) # not sure if this shouldn't be h1.cmd
 
             print("starting client")
-            clientcommand = '../build/bin/pingpong -m 2000 --host=\\"{}\\" {}'.format(h1.IP(), caf_opts)
+            clientcommand = '../build/bin/pingpong_tcp -m 2000 --host=\\"{}\\" {}'.format(h1.IP(), caf_opts)
             print(clientcommand)
             p2 = h2.popen(clientcommand, shell=True, universal_newlines=True, stdout=clientout, stderr=clienterr) # not sure if this shouldn't be h1.cmd
 
