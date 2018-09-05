@@ -27,8 +27,8 @@ namespace policy {
 
 struct closure_t {
   bool connected = false;
-  std::shared_ptr<io::network::byte_buffer> buffer;
-  int amount_read;
+  int amount_read = 0;
+  io::network::byte_buffer buffer;
 };
 
 struct quic_transport : public io::network::transport_policy {
@@ -64,10 +64,17 @@ struct quic_transport : public io::network::transport_policy {
 
   // connection state
   mozquic_connection_t* connection;
-  closure_t* closure;
+  closure_t closure;
 };
 
 struct accept_quic : public io::network::accept_policy {
+  accept_quic() :
+    connection_ip4{nullptr},
+    connection_ip6{nullptr},
+    hrr{nullptr},
+    hrr6{nullptr}
+    {};
+
   expected<io::network::native_socket>
   create_socket(uint16_t port,const char* host,bool reuse = false) override;
 
@@ -75,6 +82,13 @@ struct accept_quic : public io::network::accept_policy {
   accept(io::network::newb_base* parent) override;
 
   void init(io::network::newb_base& n) override;
+
+  // connection state
+  mozquic_connection_t* connection_ip4;
+  mozquic_connection_t* connection_ip6;
+  mozquic_connection_t* hrr;
+  mozquic_connection_t* hrr6;
+
 };
 
 template <class T>

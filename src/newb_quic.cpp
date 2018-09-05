@@ -17,7 +17,6 @@
  ******************************************************************************/
 
 #include "../caf/policy/newb_quic.hpp"
-
 #include "caf/config.hpp"
 
 #ifdef CAF_WINDOWS
@@ -67,7 +66,9 @@ quic_transport::quic_transport()
           collected{0},
           maximum{0},
           writing{false},
-          written{0} {
+          written{0},
+          connection{nullptr},
+          closure{} {
   // nop
 }
 
@@ -80,8 +81,8 @@ io::network::rw_state quic_transport::read_some
     CAF_LOG_DEBUG("recv failed");
     return io::network::rw_state::failure;
   }
-  size_t result = (closure->amount_read > 0) ?
-          static_cast<size_t>(closure->amount_read) : 0;
+  size_t result = (closure.amount_read > 0) ?
+          static_cast<size_t>(closure.amount_read) : 0;
   collected += result;
   received_bytes = collected;
   return io::network::rw_state::success;
@@ -135,6 +136,7 @@ parent) {
     CAF_LOG_ERROR("send failed");
     return io::network::rw_state::failure;
   }
+  mozquic_IO(connection);
   prepare_next_write(parent);
   return io::network::rw_state::success;
 }
@@ -178,10 +180,10 @@ int connEventCB(void* closure, uint32_t event, void* param) {
       auto clo = static_cast<closure_t*>(closure);
       uint32_t received = 0;
       int fin = 0;
-      (*clo->buffer).resize(1024); // allocate enough space for reading in
+      clo->buffer.resize(1024); // allocate enough space for reading into
                                    // the buffer
       do {
-        int code = mozquic_recv(stream, (*clo->buffer).data() + clo->amount_read,
+        int code = mozquic_recv(stream, clo->buffer.data() + clo->amount_read,
                 1024,
                 &received,
                 &fin);
@@ -194,9 +196,8 @@ int connEventCB(void* closure, uint32_t event, void* param) {
 
     case MOZQUIC_EVENT_CLOSE_CONNECTION:
     case MOZQUIC_EVENT_ERROR:
-      // todo: delete closure. memoryleak!
       mozquic_destroy_connection(param);
-      break;
+      return MOZQUIC_ERR_GENERAL;
 
     default:
       break;
@@ -211,7 +212,7 @@ quic_transport::connect(const std::string& host, uint16_t port,
                        optional<io::network::protocol::network>) {
   std::cout << "connect called" << std::endl;
   // check for nss_config
-  char nss_config[] = "/home/boss/CLionProjects/measuring-newbs/nss-config/";
+  char nss_config[] = "../nss-config/";
   if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
     std::cerr << "nss-config failure" << std::endl;
     return io::network::invalid_native_socket;
@@ -230,11 +231,9 @@ quic_transport::connect(const std::string& host, uint16_t port,
   mozquic_unstable_api1(&config, "maxSizeAllowed", 1452, nullptr);
   mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr);
   // open new connections
-  auto clo = new closure_t;
-  clo->buffer = std::make_shared<io::network::byte_buffer>(receive_buffer);
   mozquic_new_connection(&connection, &config);
   mozquic_set_event_callback(connection, connEventCB);
-  mozquic_set_event_callback_closure(connection, clo);
+  mozquic_set_event_callback_closure(connection, &closure);
   mozquic_start_client(connection);
 
   uint32_t i=0;
@@ -245,7 +244,7 @@ quic_transport::connect(const std::string& host, uint16_t port,
       fprintf(stderr,"IO reported failure\n");
       break;
     }
-  } while (++i < 2000 && !clo->connected);
+  } while (++i < 2000 && !closure.connected);
 
   std::cout << "client connected." << std::endl;
 
@@ -253,15 +252,84 @@ quic_transport::connect(const std::string& host, uint16_t port,
 }
 
 expected<io::network::native_socket>
-accept_quic::create_socket(uint16_t, const char*, bool) {
-  // nop
-  return io::network::invalid_native_socket;
+accept_quic::create_socket(uint16_t port, const char* host, bool) {
+  std::cout << "create socket called" << std::endl;
+
+  // check for nss_config
+  char nss_config[] = "../nss-config/";
+  if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
+    std::cerr << "nss-config failure" << std::endl;
+    return io::network::invalid_native_socket;
+  }
+
+  mozquic_config_t config;
+  memset(&config, 0, sizeof(mozquic_config_t));
+  if (!host)
+    config.originName = "foo.example.com";
+  else
+    config.originName = host;
+  config.originPort = port;
+
+  config.handleIO = 0;
+  config.appHandlesLogging = 0;
+
+  mozquic_unstable_api1(&config, "tolerateBadALPN", 1, nullptr);
+  mozquic_unstable_api1(&config, "tolerateNoTransportParams", 1, nullptr);
+  mozquic_unstable_api1(&config, "sabotageVN", 0, nullptr);
+  mozquic_unstable_api1(&config, "forceAddressValidation", 0, nullptr);
+  mozquic_unstable_api1(&config, "streamWindow", 4906, nullptr);
+  mozquic_unstable_api1(&config, "connWindow", 8192, nullptr);
+  mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr);
+
+  // set up connections
+  config.ipv6 = 0;
+  mozquic_new_connection(&connection_ip4, &config);
+  mozquic_set_event_callback(connection_ip4, connEventCB);
+  mozquic_start_server(connection_ip4);
+
+  config.ipv6 = 1;
+  mozquic_new_connection(&connection_ip6, &config);
+  mozquic_set_event_callback(connection_ip6, connEventCB);
+  mozquic_start_server(connection_ip6);
+
+  config.originPort = port + 1;
+  config.ipv6 = 0;
+  mozquic_unstable_api1(&config, "forceAddressValidation", 1, nullptr);
+  mozquic_new_connection(&hrr, &config);
+  mozquic_set_event_callback(hrr, connEventCB);
+  mozquic_start_server(hrr);
+
+  config.ipv6 = 1;
+  mozquic_new_connection(&hrr6, &config);
+  mozquic_set_event_callback(hrr6, connEventCB);
+  mozquic_start_server(hrr6);
+
+  uint32_t i=0;
+  do {
+    usleep (1000); // this is for handleio todo
+    mozquic_IO(connection_ip4);
+    mozquic_IO(connection_ip6);
+    mozquic_IO(hrr);
+    mozquic_IO(hrr6);
+  } while (++i < 2000);
+
+  std::cout << "server initialized" << std::endl;
+  return mozquic_osfd(connection_ip6);
 }
 
 std::pair<io::network::native_socket, io::network::transport_policy_ptr>
 accept_quic::accept(io::network::newb_base*) {
   // nop
-  return {io::network::invalid_native_socket, nullptr};
+  using namespace io::network;
+
+  if (mozquic_IO(connection_ip4) != MOZQUIC_OK ||
+      mozquic_IO(connection_ip6) != MOZQUIC_OK ||
+      mozquic_IO(hrr) != MOZQUIC_OK ||
+      mozquic_IO(hrr6) != MOZQUIC_OK)
+    return {invalid_native_socket, nullptr};
+
+  transport_policy_ptr ptr{new quic_transport};
+  return {invalid_native_socket, std::move(ptr)};
 }
 
 void accept_quic::init(io::network::newb_base& n) {
