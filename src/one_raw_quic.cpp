@@ -58,7 +58,7 @@ namespace {
                         // nop
                       }
                   },
-                  [=](send_atom, char c) {
+                  /*[=](send_atom, char c) {
                       if (running) {
                         delayed_send(this, interval, send_atom::value, char((c + 1) % 256));
                         auto whdl = wr_buf(nullptr);
@@ -68,52 +68,25 @@ namespace {
                         whdl.buf->resize(chunk_size);
                         std::fill(whdl.buf->begin(), whdl.buf->end(), c);
                       }
-                  },
+                  },*/
+                  [=](send_atom, std::string msg) {
+                      if (running) {
+                        delayed_send(this, interval, send_atom::value, char((c + 1) % 256));
+                        auto whdl = wr_buf(nullptr);
+                        CAF_ASSERT(whdl.buf != nullptr);
+                        CAF_ASSERT(whdl.protocol != nullptr);
+                        binary_serializer bs(&backend(), *whdl.buf);
+                        whdl.buf->resize(chunk_size);
+                        std::fill(whdl.buf->begin(), whdl.buf->end(), c);
+                      }
+                  }
                   [=](responder_atom, actor r) {
                       std::cout << "got responder assigned" << std::endl;
                       responder = r;
                       send(r, this);
                   },
                   [=](interval_atom) {
-                      // Reimplement this with other count method.
-                      /*
-                      if (running) {
-                        delayed_send(this, std::chrono::seconds(1), interval_atom::value);
-                        data.emplace_back(interval,
-                                          transport->count,
-                                          transport->offline_buffer.size());
-                        interval_counter += 1;
-                        if (interval_counter % 10 == 0) {
-                          auto cnt = interval.count();
-                          auto dec = cnt > 1000 ? 1000 : (cnt > 100 ? 100 : 10);
-                          interval -= std::chrono::microseconds(dec);
-                        }
-                        transport->count = 0;
-                        if (interval.count() <= 0)
-                          running = false;
-                      } else {
-                        std::map<size_t, std::vector<size_t>> aggregate;
-                        for (auto& t : data) {
-                          auto expected = (1000000 / get<0>(t).count());
-                          aggregate[expected].push_back(get<1>(t));
-                        }
-                        for (auto& p : aggregate) {
-                          std::cerr << p.first;
-                          for (auto v : p.second)
-                            std::cerr << ", " << v;
-                          std::cerr << std::endl;
-                        }
-                        send(this, quit_atom::value);
-                      }
-                      */
-                  },
-                  [=](quit_atom) {
-                      std::cout << "got quit message" << std::endl;
-                      // Remove from multiplexer loop.
-                      stop();
-                      // Quit actor.
-                      quit();
-                      send(responder, quit_atom::value);
+
                   }
           };
         }
@@ -230,8 +203,7 @@ namespace {
       if (cfg.is_server) {
         std::cout << "creating new server" << std::endl;
         auto server_ptr = make_server_newb<acceptor_t, accept_quic>(sys, port,
-                nullptr,
-                                                                   true);
+                nullptr, true);
         // If I don't do this, our newb acceptor will never get events ...
         auto b = sys.middleman().spawn_server(dummy_broker, port + 1);
         await_done();
@@ -240,8 +212,14 @@ namespace {
         auto client = make_client_newb<raw_newb, quic_transport,
                 quic_protocol<policy::raw>>(sys, host, port);
         self->send(client, responder_atom::value, helper);
-        self->send(client, send_atom::value, char(0));
-        self->send(client, interval_atom::value);
+
+        std::cout << "please give some input:" << std::endl;
+        std::string msg;
+        while(getline(std::cin, msg)) {
+          self->send(client, send_atom::value, msg.c_str());
+        }
+
+        //self->send(client, send_atom::value, 'a');
         await_done();
       }
     }

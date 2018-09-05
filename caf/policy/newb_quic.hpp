@@ -26,9 +26,11 @@ namespace caf {
 namespace policy {
 
 struct closure_t {
+  bool is_server = false;
   bool connected = false;
   int amount_read = 0;
   io::network::byte_buffer buffer;
+  int connections;
 };
 
 struct quic_transport : public io::network::transport_policy {
