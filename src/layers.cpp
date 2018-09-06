@@ -21,7 +21,7 @@ namespace {
 using ordering_atom = atom_constant<atom("ordering")>;
 
 constexpr auto from = 6;
-constexpr auto to = 6; //13;
+constexpr auto to = 13;
 
 // Receiving is currently datagram only.
 struct dummy_transport : public transport_policy {
