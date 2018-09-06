@@ -130,7 +130,7 @@ add(src pingpong_tcp)
 add(src pp_tcp_pure)
 
 add_executable(one_raw_quic
-  src/one_raw_quic.cpp
+        src/quic_newb_chat_test.cpp
   src/newb_quic.cpp
   caf/policy/newb_quic.hpp
 )
