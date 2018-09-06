@@ -35,7 +35,7 @@ struct dummy_transport : public transport_policy {
       next(0),
       payload_len(payload_len),
       upayload_len(static_cast<uint32_t>(payload_len)) {
-    // nop
+    max_consecutive_reads = 1;
   }
 
   inline rw_state read_some(newb_base* parent) override {
@@ -313,7 +313,7 @@ struct dummy_ordering_transport : public transport_policy {
       offline_sum(0),
       index(0),
       next_seq(0) {
-    // nop
+    max_consecutive_reads = 1;
   }
 
   inline rw_state read_some(newb_base* parent) override {
@@ -507,7 +507,6 @@ static void BM_receive_udp_raw_sequence_dropped(benchmark::State& state) {
     std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
   }
   ref.transport->receive_buffer = ref.transport->send_buffer;
-  ref.transport->max_consecutive_reads = 1;
   // Add instructions.
   tptr->instructions.emplace_back(instruction::next);
   tptr->instructions.emplace_back(instruction::skip);
@@ -576,7 +575,6 @@ static void BM_receive_udp_raw_sequence_late(benchmark::State& state) {
     std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
   }
   ref.transport->receive_buffer = ref.transport->send_buffer;
-  ref.transport->max_consecutive_reads = 1;
   // Add instructions.
   tptr->instructions.emplace_back(instruction::next);
   tptr->instructions.emplace_back(instruction::skip);
@@ -608,7 +606,6 @@ static void BM_receive_udp_raw_sequence_late(benchmark::State& state) {
     }
   };
   for (auto _ : state) {
-    tptr->index = 0;
     msg_expected();
     msg_unexpected();
     msg_expected();
