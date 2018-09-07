@@ -133,7 +133,7 @@ behavior raw_client(stateful_newb<new_raw_msg, state>* self) {
       if (s.received_messages % 100 == 0)
         std::cerr << "got " << s.received_messages << std::endl;
       if (s.received_messages >= s.messages) {
-        std::cout << "got all messages!" << std::endl;
+        std::cerr << "got all messages!" << std::endl;
         self->send(s.responder, quit_atom::value);
         self->stop();
         self->quit();
@@ -223,14 +223,6 @@ void caf_main(actor_system& sys, const config& cfg) {
         std::cerr << "[" << name << "] got broker, let's do this" << std::endl;
         self->become(running(self, name, m, b));
         self->set_default_handler(print_and_drop);
-      }
-    };
-  };
-
-  auto dummy_broker = [](io::broker*) -> behavior {
-    return {
-      [](io::new_connection_msg&) {
-        std::cerr << "got new connection" << std::endl;
       }
     };
   };
