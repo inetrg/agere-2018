@@ -182,16 +182,19 @@ void quic_transport::flush(io::network::newb_base* parent) {
 
 int accept_new_connection(mozquic_connection_t* new_connection, closure_t* closure) {
   mozquic_set_event_callback(new_connection, connEventCB);
-  ++closure->connection_count;
+
+  closure->connections.push_back(new_connection);
   std::cout << "new connections accepted. connected: "
-  << closure->connection_count << std::endl;
+            << closure->connections.size() << std::endl;
   return MOZQUIC_OK;
 }
 
 int close_connection(mozquic_connection_t* c, closure_t* closure) {
-  --closure->connection_count;
+  auto it = find(closure->connections.begin(), closure->connections.end(), c);
+  if (it != closure->connections.end())
+    closure->connections.erase(it);
   std::cout << "server closed connection. connected: "
-            << closure->connection_count << std::endl;
+       << closure->connections.size() << std::endl;
   return mozquic_destroy_connection(c);
 }
 
@@ -277,10 +280,8 @@ quic_transport::connect(const std::string& host, uint16_t port,
   do {
     usleep (1000); // this is for handleio todo
     int code = mozquic_IO(connection);
-    if (code != MOZQUIC_OK) {
-      fprintf(stderr,"IO reported failure\n");
+    if (code != MOZQUIC_OK)
       break;
-    }
   } while (++i < 2000 && !closure.connected);
 
   if (!closure.connected)
@@ -347,23 +348,21 @@ accept_quic::create_socket(uint16_t port, const char* host, bool) {
   mozquic_set_event_callback_closure(hrr6, &closure);
   mozquic_start_server(hrr6);
 
+  closure.connections.push_back(connection_ip4);
+  closure.connections.push_back(connection_ip6);
+  closure.connections.push_back(hrr);
+  closure.connections.push_back(hrr6);
+
   std::cout << "server initialized" << std::endl;
   return mozquic_osfd(connection_ip6);
 }
 
-std::pair<io::network::native_socket, io::network::transport_policy_ptr>
-accept_quic::accept(io::network::newb_base*) {
-  std::cout << "accept called" << std::endl;
-  using namespace io::network;
-
-  if (mozquic_IO(connection_ip4) != MOZQUIC_OK ||
-      mozquic_IO(connection_ip6) != MOZQUIC_OK ||
-      mozquic_IO(hrr) != MOZQUIC_OK ||
-      mozquic_IO(hrr6) != MOZQUIC_OK)
-    return {invalid_native_socket, nullptr};
-
-  transport_policy_ptr ptr{new quic_transport};
-  return {invalid_native_socket, std::move(ptr)};
+void accept_quic::read_event(caf::io::network::newb_base *) {
+  std::cout << "read_event called" << std::endl;
+  for (auto c : closure.connections) {
+    if(mozquic_IO(c) != MOZQUIC_OK)
+      break;
+  }
 }
 
 void accept_quic::init(io::network::newb_base& n) {

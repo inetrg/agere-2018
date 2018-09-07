@@ -29,7 +29,6 @@ struct closure_t {
   bool connected = false;
   int amount_read = 0;
   io::network::byte_buffer buffer;
-  int connection_count;
   std::vector<mozquic_connection_t*> connections;
 };
 
@@ -80,6 +79,7 @@ struct quic_transport : public io::network::transport_policy {
 
 struct accept_quic : public io::network::accept_policy {
   accept_quic() :
+    accept_policy(true),
     connection_ip4{nullptr},
     connection_ip6{nullptr},
     hrr{nullptr},
@@ -100,8 +100,10 @@ struct accept_quic : public io::network::accept_policy {
   expected<io::network::native_socket>
   create_socket(uint16_t port,const char* host,bool reuse = false) override;
 
-  std::pair<io::network::native_socket, io::network::transport_policy_ptr>
-  accept(io::network::newb_base* parent) override;
+  /// If `manual_read` is set to true, the acceptor will only call
+  /// this function for new read event and let the policy handle everything
+  /// else.
+  void read_event(io::network::newb_base*) override;
 
   void init(io::network::newb_base& n) override;
 
