@@ -78,18 +78,19 @@ io::network::rw_state quic_transport::read_some
 (io::network::newb_base*) {
   std::cout << "read some called" << std::endl;
   CAF_LOG_TRACE("");
-  int res = mozquic_IO(connection);
-  if (res != MOZQUIC_OK) {
-    // Recv returns 0 when the peer has performed an orderly shutdown.
-    CAF_LOG_DEBUG("recv failed");
-    return io::network::rw_state::failure;
+  int i = 0;
+  while (++i < 20) {
+    if (mozquic_IO(connection) != MOZQUIC_OK) {
+      CAF_LOG_DEBUG("recv failed");
+      return io::network::rw_state::failure;
+    }
   }
   size_t result = (closure.amount_read > 0) ?
           static_cast<size_t>(closure.amount_read) : 0;
   collected += result;
   received_bytes = collected;
-  std::cout << "received data: \n" <<
-               closure.buffer.data() << std::endl;
+  if (received_bytes)
+    std::cout << "received data: \n" << closure.buffer.data() << std::endl;
   return io::network::rw_state::success;
 }
 
@@ -145,7 +146,11 @@ parent) {
     CAF_LOG_ERROR("send failed");
     return io::network::rw_state::failure;
   }
-  mozquic_IO(connection);
+  int i = 0;
+  while (++i < 20) {
+    if(mozquic_IO(connection) != MOZQUIC_OK)
+      return io::network::rw_state::failure;
+  }
   prepare_next_write(parent);
   return io::network::rw_state::success;
 }
@@ -177,21 +182,20 @@ void quic_transport::flush(io::network::newb_base* parent) {
 
 int accept_new_connection(mozquic_connection_t* new_connection, closure_t* closure) {
   mozquic_set_event_callback(new_connection, connEventCB);
-  ++closure->connections;
+  ++closure->connection_count;
   std::cout << "new connections accepted. connected: "
-  << closure->connections << std::endl;
+  << closure->connection_count << std::endl;
   return MOZQUIC_OK;
 }
 
 int close_connection(mozquic_connection_t* c, closure_t* closure) {
-  --closure->connections;
+  --closure->connection_count;
   std::cout << "server closed connection. connected: "
-            << closure->connections << std::endl;
+            << closure->connection_count << std::endl;
   return mozquic_destroy_connection(c);
 }
 
 int connEventCB(void* closure, uint32_t event, void* param) {
-  std::cout << "callback called" << std::endl;
   switch (event) {
     case MOZQUIC_EVENT_CONNECTED: {
       std::cout << "connected" << std::endl;
@@ -226,7 +230,7 @@ int connEventCB(void* closure, uint32_t event, void* param) {
     case MOZQUIC_EVENT_CLOSE_CONNECTION:
     case MOZQUIC_EVENT_ERROR:
        std::cout << (event == MOZQUIC_EVENT_ERROR ? "ERROR" : "CLOSE") << std::endl;
-      mozquic_destroy_connection(param);
+      close_connection(param, static_cast<closure_t*>(closure));
       return MOZQUIC_ERR_GENERAL;
 
     case MOZQUIC_EVENT_ACCEPT_NEW_CONNECTION:
@@ -234,7 +238,6 @@ int connEventCB(void* closure, uint32_t event, void* param) {
       break;
 
     default:
-      std::cout << "default" << std::endl;
       break;
   }
 
@@ -246,7 +249,7 @@ quic_transport::connect(const std::string& host, uint16_t port,
                        optional<io::network::protocol::network>) {
   std::cout << "connect called" << std::endl;
   // check for nss_config
-  char nss_config[] = "../nss-config/";
+  char nss_config[] = "/home/jakob/CLionProjects/measuring-newbs/nss-config/";
   if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
     std::cerr << "nss-config failure" << std::endl;
     return io::network::invalid_native_socket;
@@ -280,7 +283,10 @@ quic_transport::connect(const std::string& host, uint16_t port,
     }
   } while (++i < 2000 && !closure.connected);
 
-  return mozquic_osfd(connection);
+  if (!closure.connected)
+    return io::network::invalid_native_socket;
+  else
+    return mozquic_osfd(connection);
 }
 
 expected<io::network::native_socket>
@@ -288,13 +294,13 @@ accept_quic::create_socket(uint16_t port, const char* host, bool) {
   std::cout << "create socket called" << std::endl;
 
   // check for nss_config
-  char nss_config[] ="/home/jakob/CLionProjects/mozquic_example/nss-config/";
+  char nss_config[] = "/home/jakob/CLionProjects/measuring-newbs/nss-config/";
   if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
     std::cerr << "nss-config failure" << std::endl;
     return io::network::invalid_native_socket;
   }
 
-  mozquic_config_t config;
+  mozquic_config_t config = {};
   memset(&config, 0, sizeof(mozquic_config_t));
   if (!host)
     config.originName = "foo.example.com";
@@ -314,8 +320,6 @@ accept_quic::create_socket(uint16_t port, const char* host, bool) {
   mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr);
 
   closure_t closure;
-  closure.is_server = true;
-
   // set up connections
   config.ipv6 = 0;
   mozquic_new_connection(&connection_ip4, &config);

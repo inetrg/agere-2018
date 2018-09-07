@@ -26,15 +26,24 @@ namespace caf {
 namespace policy {
 
 struct closure_t {
-  bool is_server = false;
   bool connected = false;
   int amount_read = 0;
   io::network::byte_buffer buffer;
-  int connections;
+  int connection_count;
+  std::vector<mozquic_connection_t*> connections;
 };
 
 struct quic_transport : public io::network::transport_policy {
   quic_transport();
+  explicit quic_transport(mozquic_connection_t* conn) : // this is for server.
+    quic_transport() {
+    connection = conn;
+  };
+
+  ~quic_transport() override {
+    mozquic_shutdown_connection(connection);
+    mozquic_destroy_connection(connection);
+  }
 
   io::network::rw_state read_some(io::network::newb_base* parent) override;
 
@@ -77,6 +86,17 @@ struct accept_quic : public io::network::accept_policy {
     hrr6{nullptr}
     {};
 
+  ~accept_quic() override {
+    // destroy all pending connections
+    mozquic_destroy_connection(connection_ip4);
+    mozquic_destroy_connection(connection_ip6);
+    mozquic_destroy_connection(hrr);
+    mozquic_destroy_connection(hrr6);
+    for (auto c : closure.connections) {
+      mozquic_destroy_connection(c);
+    }
+  }
+
   expected<io::network::native_socket>
   create_socket(uint16_t port,const char* host,bool reuse = false) override;
 
@@ -91,6 +111,7 @@ struct accept_quic : public io::network::accept_policy {
   mozquic_connection_t* hrr;
   mozquic_connection_t* hrr6;
 
+  closure_t closure;
 };
 
 template <class T>

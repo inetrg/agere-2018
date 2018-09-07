@@ -4,9 +4,6 @@ set (CMAKE_C_COMPILER clang)
 set (CMAKE_CXX_COMPILER clang++)
 set (CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
-set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
-set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_STATIC_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
-
 # silence policy CMP0042 warning by enabling RPATH explicitly
 if(APPLE AND NOT DEFINED CMAKE_MACOSX_RPATH)
     set(CMAKE_MACOSX_RPATH true)
@@ -22,19 +19,19 @@ endif ()
 if(CAF_ENABLE_ADDRESS_SANITIZER)
     # check whether address sanitizer is available
     set(CXXFLAGS_BACKUP "${CMAKE_CXX_FLAGS}")
-    set(CMAKE_CXX_FLAGS "-fsanitize=address -fno-omit-frame-pointer")
-    try_run(ProgramResult
-            CompilationSucceeded
-            "${CMAKE_CURRENT_BINARY_DIR}"
-            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/get_compiler_version.cpp")
-    if(NOT CompilationSucceeded)
-        message(WARNING "Address Sanitizer is not available on selected compiler")
-    else()
-        message(STATUS "Enable Address Sanitizer")
-        set(EXTRA_FLAGS "${EXTRA_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
-    endif()
-    # restore CXX flags
-    set(CMAKE_CXX_FLAGS "${CXXFLAGS_BACKUP}")
+   set(CMAKE_CXX_FLAGS "-fsanitize=address -fno-omit-frame-pointer")
+   try_run(ProgramResult
+           CompilationSucceeded
+           "${CMAKE_CURRENT_BINARY_DIR}"
+           "${CMAKE_CURRENT_SOURCE_DIR}/cmake/get_compiler_version.cpp")
+   if(NOT CompilationSucceeded)
+       message(WARNING "Address Sanitizer is not available on selected compiler")
+   else()
+       message(STATUS "Enable Address Sanitizer")
+       set(EXTRA_FLAGS "${EXTRA_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
+   endif()
+   # restore CXX flags
+   set(CMAKE_CXX_FLAGS "${CXXFLAGS_BACKUP}")
 endif(CAF_ENABLE_ADDRESS_SANITIZER)
 
 # check if the user provided CXXFLAGS, set defaults otherwise
@@ -82,11 +79,9 @@ endif ()
 
 if (NOT MOZQUIC_ROOT_DIR)
   set(MOZQUIC_ROOT_DIR "/home/jakob/CLionProjects/mozquic/")
-  #set(MOZQUIC_ROOT_DIR "/home/boss/Desktop/mozilla/mozquic/")
 endif ()
 find_package(Mozquic)
 if (MOZQUIC_FOUND)
-    #include_directories(${MOZQUIC_INCLUDE_DIRS})
     set(INCLUDE_DIRS ${INCLUDE_DIRS} ${MOZQUIC_INCLUDE_DIRS})
 else ()
     message(FATAL_ERROR "could not find Mozquic")
@@ -129,19 +124,19 @@ add(src pingpong)
 add(src pingpong_tcp)
 add(src pp_tcp_pure)
 
-add_executable(one_raw_quic
+add_executable(quic_chat_test
         src/quic_newb_chat_test.cpp
   src/newb_quic.cpp
   caf/policy/newb_quic.hpp
 )
 target_link_libraries(
-        one_raw_quic
+        quic_chat_test
         ${CAF_LIBRARY_IO}
         ${CAF_LIBRARY_CORE}
         ${BENCHMARK_LIBRARIES}
         ${NSS_LIBRARIES}
         ${NSPR_LIBRARIES}
         ${MOZQUIC_LIBRARIES})
-add_dependencies(one_raw_quic newb_measurements)
-target_link_libraries(one_raw_quic Threads::Threads)
+add_dependencies(quic_chat_test newb_measurements)
+target_link_libraries(quic_chat_test Threads::Threads)
 
