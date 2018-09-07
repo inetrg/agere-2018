@@ -35,7 +35,7 @@ struct dummy_transport : public transport_policy {
       next(0),
       payload_len(payload_len),
       upayload_len(static_cast<uint32_t>(payload_len)) {
-    // nop
+    max_consecutive_reads = 1;
   }
 
   inline rw_state read_some(newb_base* parent) override {
@@ -138,10 +138,12 @@ struct dummy_newb : public newb<Message> {
   using message_type = Message;
 
   dummy_newb(caf::actor_config& cfg, default_multiplexer& dm,
-            native_socket sockfd)
+             native_socket sockfd)
       : newb<message_type>(cfg, dm, sockfd) {
-    // nop
     CAF_LOG_TRACE("");
+    scheduled_actor::set_timeout_handler([&](timeout_msg&) {
+      // Drop timeouts.
+    });
   }
 
   behavior make_behavior() override {
@@ -183,7 +185,8 @@ static void BM_send(benchmark::State& state) {
   using newb_t = dummy_newb<Message>;
   config cfg;
   actor_system sys{cfg};
-  auto n = make_newb<newb_t>(sys, invalid_native_socket);
+  auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
+  auto n = make_newb<newb_t>(sys, *esock);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   auto& ref = dynamic_cast<newb_t&>(*ptr);
   ref.transport.reset(new dummy_transport(state.range(0)));
@@ -208,18 +211,18 @@ static void BM_send(benchmark::State& state) {
   }
 }
 
-BENCHMARK_TEMPLATE(BM_send, raw_data_message, tcp_protocol<raw>)
+BENCHMARK_TEMPLATE(BM_send, new_raw_msg, tcp_protocol<raw>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
-BENCHMARK_TEMPLATE(BM_send, new_basp_message, tcp_protocol<stream_basp>)
+BENCHMARK_TEMPLATE(BM_send, new_basp_msg, tcp_protocol<stream_basp>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
 
-BENCHMARK_TEMPLATE(BM_send, raw_data_message, udp_protocol<raw>)
+BENCHMARK_TEMPLATE(BM_send, new_raw_msg, udp_protocol<raw>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
-BENCHMARK_TEMPLATE(BM_send, raw_data_message, udp_protocol<ordering<raw>>)
+BENCHMARK_TEMPLATE(BM_send, new_raw_msg, udp_protocol<ordering<raw>>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
-BENCHMARK_TEMPLATE(BM_send, new_basp_message, udp_protocol<datagram_basp>)
+BENCHMARK_TEMPLATE(BM_send, new_basp_msg, udp_protocol<datagram_basp>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
-BENCHMARK_TEMPLATE(BM_send, new_basp_message, udp_protocol<ordering<datagram_basp>>)
+BENCHMARK_TEMPLATE(BM_send, new_basp_msg, udp_protocol<ordering<datagram_basp>>)
   ->RangeMultiplier(2)->Range(1<<from,1<<to);
 
 // -- receiving ----------------------------------------------------------------
@@ -231,7 +234,8 @@ static void BM_receive_impl(benchmark::State& state, bool wseq, bool wsize) {
   using proto_t = Protocol;
   config cfg;
   actor_system sys{cfg};
-  auto n = make_newb<newb_t>(sys, invalid_native_socket);
+  auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
+  auto n = make_newb<newb_t>(sys, *esock);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   auto& ref = dynamic_cast<newb_t&>(*ptr);
   auto tptr = new dummy_transport(state.range(0));
@@ -261,27 +265,27 @@ static void BM_receive_impl(benchmark::State& state, bool wseq, bool wsize) {
 }
 
 static void BM_receive_udp_raw(benchmark::State& state) {
-  BM_receive_impl<raw_data_message, udp_protocol<raw>>(state, false, false);
+  BM_receive_impl<new_raw_msg, udp_protocol<raw>>(state, false, false);
 }
 
 static void BM_receive_udp_ordering_raw(benchmark::State& state) {
-  BM_receive_impl<raw_data_message, udp_protocol<ordering<raw>>>(state, true, false);
+  BM_receive_impl<new_raw_msg, udp_protocol<ordering<raw>>>(state, true, false);
 }
 
 static void BM_receive_udp_basp(benchmark::State& state) {
-  BM_receive_impl<new_basp_message, udp_protocol<datagram_basp>>(state, false, true);
+  BM_receive_impl<new_basp_msg, udp_protocol<datagram_basp>>(state, false, true);
 }
 
 static void BM_receive_udp_ordering_basp(benchmark::State& state) {
-  BM_receive_impl<new_basp_message, udp_protocol<ordering<datagram_basp>>>(state, true, true);
+  BM_receive_impl<new_basp_msg, udp_protocol<ordering<datagram_basp>>>(state, true, true);
 }
 
 static void BM_receive_tcp_raw(benchmark::State& state) {
-  BM_receive_impl<raw_data_message, tcp_protocol<raw>>(state, false, false);
+  BM_receive_impl<new_raw_msg, tcp_protocol<raw>>(state, false, false);
 }
 
 static void BM_receive_tcp_basp(benchmark::State& state) {
-  BM_receive_impl<new_basp_message, tcp_protocol<stream_basp>>(state, false, true);
+  BM_receive_impl<new_basp_msg, tcp_protocol<stream_basp>>(state, false, true);
 }
 
 BENCHMARK(BM_receive_udp_raw)->RangeMultiplier(2)->Range(1<<from, 1<<to);
@@ -309,7 +313,7 @@ struct dummy_ordering_transport : public transport_policy {
       offline_sum(0),
       index(0),
       next_seq(0) {
-    // nop
+    max_consecutive_reads = 1;
   }
 
   inline rw_state read_some(newb_base* parent) override {
@@ -318,7 +322,7 @@ struct dummy_ordering_transport : public transport_policy {
                                    sizeof(next_seq)};
     switch (instructions[index]) {
       case skip:
-        //std::cerr << " skip (" << ext_seq << ")" << std::endl;
+        //std::cerr << " skip (" << next_seq << ")" << std::endl;
         skipped.push_back(next_seq);
         next_seq += 1;
         // fall through
@@ -334,10 +338,9 @@ struct dummy_ordering_transport : public transport_policy {
         break;
     }
     received_bytes = payload_len + caf::policy::ordering_header_len;
+    index += 1;
     if (index >= instructions.size())
       index = 0;
-    else
-      index += 1;
     return rw_state::success;
   }
 
@@ -346,8 +349,8 @@ struct dummy_ordering_transport : public transport_policy {
   }
 
   void prepare_next_read(newb_base*) override {
-    received_bytes = 0;
-    receive_buffer.resize(maximum);
+    //received_bytes = 0;
+    //receive_buffer.resize(maximum);
   }
 
   inline void configure_read(io::receive_policy::config) override {
@@ -421,11 +424,12 @@ struct dummy_ordering_transport : public transport_policy {
 
 // Deliver a sequence of message all inorder.
 static void BM_receive_udp_raw_sequence_inorder(benchmark::State& state) {
-  using newb_t = dummy_newb<raw_data_message>;
+  using newb_t = dummy_newb<new_raw_msg>;
   using proto_t = udp_protocol<ordering<raw>>;
   no_clock_config cfg;
   actor_system sys{cfg};
-  actor n = make_newb<newb_t>(sys, invalid_native_socket);
+  auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
+  actor n = make_newb<newb_t>(sys, *esock);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   auto& ref = dynamic_cast<newb_t&>(*ptr);
   auto tptr = new dummy_ordering_transport;
@@ -463,7 +467,6 @@ static void BM_receive_udp_raw_sequence_inorder(benchmark::State& state) {
     }
   };
   for (auto _ : state) {
-    tptr->index = 0;
     msg_expected();
     msg_expected();
     msg_expected();
@@ -483,11 +486,12 @@ BENCHMARK(BM_receive_udp_raw_sequence_inorder)->RangeMultiplier(2)->Range(1<<fro
 
 // Deliver a sequence of messages with one message missing.
 static void BM_receive_udp_raw_sequence_dropped(benchmark::State& state) {
-  using newb_t = dummy_newb<raw_data_message>;
+  using newb_t = dummy_newb<new_raw_msg>;
   using proto_t = udp_protocol<ordering<raw>>;
   no_clock_config cfg;
   actor_system sys{cfg};
-  actor n = make_newb<newb_t>(sys, invalid_native_socket);
+  auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
+  actor n = make_newb<newb_t>(sys, *esock);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   auto& ref = dynamic_cast<newb_t&>(*ptr);
   auto tptr = new dummy_ordering_transport;
@@ -516,7 +520,6 @@ static void BM_receive_udp_raw_sequence_dropped(benchmark::State& state) {
   tptr->instructions.emplace_back(instruction::next);
   tptr->instructions.emplace_back(instruction::next);
   auto msg_expected = [&] {
-    //std::cerr << "expected" << std::endl;
     ref.received = false;
     ref.read_event();
     if (!ref.received) {
@@ -525,16 +528,14 @@ static void BM_receive_udp_raw_sequence_dropped(benchmark::State& state) {
     }
   };
   auto msg_unexpected = [&] {
-    //std::cerr << "unexpected" << std::endl;
     ref.received = false;
     ref.read_event();
     if (ref.received) {
-      std::cerr << "message arrive unexpectedly" << std::endl;
+      std::cerr << "message arrived unexpectedly" << std::endl;
       std::abort();
     }
   };
   for (auto _ : state) {
-    tptr->index = 0;
     msg_expected();
     msg_unexpected();
     msg_unexpected();
@@ -553,11 +554,12 @@ BENCHMARK(BM_receive_udp_raw_sequence_dropped)->RangeMultiplier(2)->Range(1<<fro
 
 // Deliver a sequence of messages with one delivered out of order.
 static void BM_receive_udp_raw_sequence_late(benchmark::State& state) {
-  using newb_t = dummy_newb<raw_data_message>;
+  using newb_t = dummy_newb<new_raw_msg>;
   using proto_t = udp_protocol<ordering<raw>>;
   no_clock_config cfg;
   actor_system sys{cfg};
-  actor n = make_newb<newb_t>(sys, invalid_native_socket);
+  auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
+  actor n = make_newb<newb_t>(sys, *esock);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   auto& ref = dynamic_cast<newb_t&>(*ptr);
   auto tptr = new dummy_ordering_transport;
@@ -604,7 +606,6 @@ static void BM_receive_udp_raw_sequence_late(benchmark::State& state) {
     }
   };
   for (auto _ : state) {
-    tptr->index = 0;
     msg_expected();
     msg_unexpected();
     msg_expected();

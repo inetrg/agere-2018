@@ -30,8 +30,8 @@ using handshake_atom = atom_constant<atom("handshake")>;
 
 constexpr size_t chunk_size = 8192; //128; //1024;
 
-struct raw_newb : public io::network::newb<policy::raw_data_message> {
-  using message_type = policy::raw_data_message;
+struct raw_newb : public io::network::newb<policy::new_raw_msg> {
+  using message_type = policy::new_raw_msg;
 
   raw_newb(caf::actor_config& cfg, default_multiplexer& dm,
             native_socket sockfd)
