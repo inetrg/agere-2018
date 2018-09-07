@@ -77,9 +77,7 @@ behavior tcp_client(stateful_broker<state>* self, connection_handle hdl) {
       if (s.received_messages % 100 == 0)
         std::cerr << "got " << s.received_messages << std::endl;
       if (s.received_messages >= s.messages) {
-        std::cout << "got all messages!" << std::endl;
         self->send(s.responder, quit_atom::value);
-        self->quit();
       } else {
         std::vector<char> buf;
         binary_serializer bs(self->system(), buf);
@@ -107,8 +105,9 @@ behavior raw_server(stateful_newb<new_raw_msg, state>* self) {
       bs(counter);
     },
     [=](io_error_msg& msg) {
-      std::cerr << "io_error: " << to_string(msg.op) << std::endl;
+      std::cerr << "server got io error: " << to_string(msg.op) << std::endl;
       self->quit();
+      self->stop();
       self->send(self->state.responder, quit_atom::value);
     }
   };
@@ -145,7 +144,8 @@ behavior raw_client(stateful_newb<new_raw_msg, state>* self) {
       }
     },
     [=](io_error_msg& msg) {
-      std::cerr << "io_error: " << to_string(msg.op) << std::endl;
+      std::cerr << "client got io error: " << to_string(msg.op) << std::endl;
+      self->stop();
       self->quit();
       self->send(self->state.responder, quit_atom::value);
     }
@@ -165,7 +165,6 @@ struct tcp_acceptor
   expected<actor> create_newb(native_socket sockfd,
                               io::network::transport_policy_ptr pol) override {
     CAF_LOG_TRACE(CAF_ARG(sockfd));
-    std::cerr << "acceptor creating newb to handle socket " << sockfd << std::endl;
     auto n = io::network::spawn_newb<ProtocolPolicy>(this->backend().system(), raw_server, std::move(pol), sockfd);
     auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
     if (ptr == nullptr) {
@@ -253,9 +252,8 @@ void caf_main(actor_system& sys, const config& cfg) {
       auto server_ptr = make_server_newb<acceptor_t, accept_tcp>(sys, port,
                                                                  nullptr, true);
       server_ptr->responder = self;
-      // If I don't do this, our newb acceptor will never get events ...
-      auto b = sys.middleman().spawn_server(dummy_broker, port + 1);
       await_done("done");
+      std::cerr << "stopping server" << std::endl;
       server_ptr->stop();
     } else {
       std::cerr << "creating client" << std::endl;
@@ -271,7 +269,7 @@ void caf_main(actor_system& sys, const config& cfg) {
       await_done("done");
       auto end = system_clock::now();
       std::cout << duration_cast<milliseconds>(end - start).count() << "ms" << std::endl;
-      self->send(client, exit_reason::user_shutdown);
+      //self->send(client, exit_reason::user_shutdown);
     }
   } else {
     if (cfg.is_server) {
