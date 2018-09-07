@@ -174,7 +174,6 @@ struct tcp_acceptor
     auto& ref = dynamic_cast<stateful_newb<new_raw_msg, state>&>(*ptr);
     ref.state.responder = responder;
     ref.configure_read(io::receive_policy::exactly(sizeof(uint32_t)));
-    anon_send(responder, n);
     return n;
   }
 
@@ -207,30 +206,6 @@ void caf_main(actor_system& sys, const config& cfg) {
   const uint16_t port = cfg.port;
   scoped_actor self{sys};
 
-  auto running = [=](event_based_actor* self, std::string,
-                     actor m, actor) -> behavior {
-    return {
-      [=](quit_atom) {
-        self->send(m, quit_atom::value);
-      }
-    };
-  };
-  auto init = [=](event_based_actor* self, std::string name,
-                  actor m) -> behavior {
-    self->set_default_handler(skip);
-    return {
-      [=](actor b) {
-        std::cerr << "[" << name << "] got broker, let's do this" << std::endl;
-        self->become(running(self, name, m, b));
-        self->set_default_handler(print_and_drop);
-      }
-    };
-  };
-
-  auto name = cfg.is_server ? "server" : "client";
-  auto helper = sys.spawn(init, name, self);
-
-  actor nb;
   auto await_done = [&](std::string msg) {
     self->receive(
       [&](quit_atom) {
