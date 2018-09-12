@@ -48,10 +48,10 @@ udp <- split(df,df$proto)[['udp']]
 udp$operation <- data.frame(ifelse(grepl("send", udp$benchmark), "send", "receive"))
 # Get UDP send tests.
 udp_send <- split(udp,udp$operation)[['send']]
-udp_send$benchmark <- gsub("BM_send<raw_data_message, udp_protocol<raw>>",                     "Raw",             udp_send$benchmark)
-udp_send$benchmark <- gsub("BM_send<raw_data_message, udp_protocol<ordering<raw>>>",           "Ordering",        udp_send$benchmark)
-udp_send$benchmark <- gsub("BM_send<new_basp_message, udp_protocol<datagram_basp>>",           "BASP",            udp_send$benchmark)
-udp_send$benchmark <- gsub("BM_send<new_basp_message, udp_protocol<ordering<datagram_basp>>>", "Ordering + BASP", udp_send$benchmark)
+udp_send$benchmark <- gsub("BM_send<new_raw_msg, udp_protocol<raw>>",                     "Raw",             udp_send$benchmark)
+udp_send$benchmark <- gsub("BM_send<new_raw_msg, udp_protocol<ordering<raw>>>",           "Ordering",        udp_send$benchmark)
+udp_send$benchmark <- gsub("BM_send<new_basp_msg, udp_protocol<datagram_basp>>",           "BASP",            udp_send$benchmark)
+udp_send$benchmark <- gsub("BM_send<new_basp_msg, udp_protocol<ordering<datagram_basp>>>", "Ordering + BASP", udp_send$benchmark)
 udp_send_plot <- ggplot(udp_send, aes(x=size, y=real_time / 1000, color=benchmark)) +
                  geom_line() + # size=0.8) +
                  geom_point(aes(shape=benchmark), stroke=1.3) +
@@ -90,10 +90,10 @@ udp_receive <- split(udp,udp$operation)[['receive']]
 udp_receive$sequence <- data.frame(ifelse(grepl("sequence", udp_receive$benchmark), "yes", "no"))
 # Process single results.
 udp_receive_single <- split(udp_receive,udp_receive$sequence)[['no']]
-udp_receive_single$benchmark <- gsub("BM_receive<raw_data_message, udp_protocol<raw>>",                     "Raw",             udp_receive_single$benchmark)
-udp_receive_single$benchmark <- gsub("BM_receive<raw_data_message, udp_protocol<ordering<raw>>>",           "Ordering",        udp_receive_single$benchmark)
-udp_receive_single$benchmark <- gsub("BM_receive<new_basp_message, udp_protocol<datagram_basp>>",           "BASP",            udp_receive_single$benchmark)
-udp_receive_single$benchmark <- gsub("BM_receive<new_basp_message, udp_protocol<ordering<datagram_basp>>>", "Ordering + BASP", udp_receive_single$benchmark)
+udp_receive_single$benchmark <- gsub("BM_receive<new_raw_msg, udp_protocol<raw>>",                     "Raw",             udp_receive_single$benchmark)
+udp_receive_single$benchmark <- gsub("BM_receive<new_raw_msg, udp_protocol<ordering<raw>>>",           "Ordering",        udp_receive_single$benchmark)
+udp_receive_single$benchmark <- gsub("BM_receive<new_basp_msg, udp_protocol<datagram_basp>>",           "BASP",            udp_receive_single$benchmark)
+udp_receive_single$benchmark <- gsub("BM_receive<new_basp_msg, udp_protocol<ordering<datagram_basp>>>", "Ordering + BASP", udp_receive_single$benchmark)
 # Had to rename some benchmarks.
 udp_receive_single$benchmark <- gsub("BM_receive_udp_raw",           "Raw",             udp_receive_single$benchmark)
 udp_receive_single$benchmark <- gsub("BM_receive_udp_ordering_raw",  "Ordering",        udp_receive_single$benchmark)
@@ -181,8 +181,8 @@ tcp_send <- split(tcp, tcp$operation)[['send']]
 tcp_receive <- split(tcp, tcp$operation)[['receive']]
 
 # Rename things.
-tcp_send$benchmark <- gsub("BM_send<raw_data_message, tcp_protocol<raw>>",         "Raw",  tcp_send$benchmark)
-tcp_send$benchmark <- gsub("BM_send<new_basp_message, tcp_protocol<stream_basp>>", "BASP", tcp_send$benchmark)
+tcp_send$benchmark <- gsub("BM_send<new_raw_msg, tcp_protocol<raw>>",         "Raw",  tcp_send$benchmark)
+tcp_send$benchmark <- gsub("BM_send<new_basp_msg, tcp_protocol<stream_basp>>", "BASP", tcp_send$benchmark)
 
 tcp_send_plot <- ggplot(tcp_send, aes(x=size, y=real_time/1000, color=benchmark)) +
                         geom_line() + # size=0.8) +
@@ -350,6 +350,8 @@ combined_receive_plot <- ggplot(receive_combined, aes(x=size, y=real_time/1000, 
                                 scale_color_brewer(type="qual", palette=6) +
                                 labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
   
+# ggsave("receive_combined.pdf", plot=combined_receive_plot, width=3.4, height=2.3)
+
 tikz(file="figs/receive_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
 combined_receive_plot
 dev.off()

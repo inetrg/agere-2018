@@ -28,8 +28,8 @@ using responder_atom = atom_constant<atom("responder")>;
 
 constexpr size_t chunk_size = 1024; //128; //8192; //1024;
 
-struct basp_newb : public io::network::newb<policy::new_basp_message> {
-  using message_type = policy::new_basp_message;
+struct basp_newb : public io::network::newb<policy::new_basp_msg> {
+  using message_type = policy::new_basp_msg;
 
   basp_newb(caf::actor_config& cfg, default_multiplexer& dm,
             native_socket sockfd)
