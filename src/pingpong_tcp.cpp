@@ -152,6 +152,7 @@ behavior raw_client(stateful_newb<new_raw_msg, state>* self) {
   };
 }
 
+/*
 template <class ProtocolPolicy>
 struct tcp_acceptor
     : public io::network::newb_acceptor<typename ProtocolPolicy::message_type> {
@@ -179,6 +180,7 @@ struct tcp_acceptor
 
   actor responder;
 };
+*/
 
 class config : public actor_system_config {
 public:
@@ -201,7 +203,7 @@ public:
 void caf_main(actor_system& sys, const config& cfg) {
   using namespace std::chrono;
   using proto_t = tcp_protocol<raw>;
-  using acceptor_t = tcp_acceptor<proto_t>;
+  //using acceptor_t = tcp_acceptor<proto_t>;
   const char* host = cfg.host.c_str();
   const uint16_t port = cfg.port;
   scoped_actor self{sys};
@@ -216,12 +218,17 @@ void caf_main(actor_system& sys, const config& cfg) {
   if (!cfg.traditional) {
     if (cfg.is_server) {
       std::cerr << "creating server" << std::endl;
+      caf::io::network::accept_policy_ptr pol{new accept_tcp};
+      auto server = make_server<proto_t>(sys, raw_server, std::move(pol), port,
+                                         nullptr, true);
+      /*
       auto server_ptr = make_server_newb<acceptor_t, accept_tcp>(sys, port,
                                                                  nullptr, true);
       server_ptr->responder = self;
       await_done("done");
       std::cerr << "stopping server" << std::endl;
       server_ptr->stop();
+      */
     } else {
       std::cerr << "creating client" << std::endl;
       transport_policy_ptr pol{new tcp_transport};
