@@ -199,6 +199,7 @@ int close_connection(mozquic_connection_t* c, closure_t* closure) {
 }
 
 int connEventCB(void* closure, uint32_t event, void* param) {
+  std::cout << "callback called" << std::endl;
   switch (event) {
     case MOZQUIC_EVENT_CONNECTED: {
       std::cout << "connected" << std::endl;
@@ -208,7 +209,6 @@ int connEventCB(void* closure, uint32_t event, void* param) {
     }
 
     case MOZQUIC_EVENT_NEW_STREAM_DATA: {
-      std::cout << "new stream data" << std::endl;
       mozquic_stream_t *stream = param;
       if (mozquic_get_streamid(stream) & 0x3)
         break;
@@ -226,13 +226,17 @@ int connEventCB(void* closure, uint32_t event, void* param) {
         if (code != MOZQUIC_OK)
           return code;
         clo->amount_read += received; // gather amount that was read
+
       } while(received > 0 && !fin);
+      std::cout << "data received: \n"
+                << clo->buffer.data() << std::endl;
       break;
     }
 
     case MOZQUIC_EVENT_CLOSE_CONNECTION:
     case MOZQUIC_EVENT_ERROR:
-       std::cout << (event == MOZQUIC_EVENT_ERROR ? "ERROR" : "CLOSE") << std::endl;
+       std::cout << (event == MOZQUIC_EVENT_ERROR ? "ERROR" : "CLOSE")
+                 << std::endl;
       close_connection(param, static_cast<closure_t*>(closure));
       return MOZQUIC_ERR_GENERAL;
 
@@ -255,7 +259,7 @@ quic_transport::connect(const std::string& host, uint16_t port,
   char nss_config[] = "/home/jakob/CLionProjects/measuring-newbs/nss-config/";
   if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
     std::cerr << "nss-config failure" << std::endl;
-    return io::network::invalid_native_socket;
+    return io::network::invalid_native_socket; // cant I return some error?
   }
 
   mozquic_config_t config = {};
@@ -308,10 +312,9 @@ accept_quic::create_socket(uint16_t port, const char* host, bool) {
   else
     config.originName = host;
   config.originPort = port;
-
   config.handleIO = 0;
   config.appHandlesLogging = 0;
-
+  config.ipv6 = 1;
   mozquic_unstable_api1(&config, "tolerateBadALPN", 1, nullptr);
   mozquic_unstable_api1(&config, "tolerateNoTransportParams", 1, nullptr);
   mozquic_unstable_api1(&config, "sabotageVN", 0, nullptr);
@@ -321,47 +324,22 @@ accept_quic::create_socket(uint16_t port, const char* host, bool) {
   mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr);
 
   closure_t closure;
-  // set up connections
-  config.ipv6 = 0;
-  mozquic_new_connection(&connection_ip4, &config);
-  mozquic_set_event_callback(connection_ip4, connEventCB);
-  mozquic_set_event_callback_closure(connection_ip4, &closure);
-  mozquic_start_server(connection_ip4);
-
-  config.ipv6 = 1;
-  mozquic_new_connection(&connection_ip6, &config);
-  mozquic_set_event_callback(connection_ip6, connEventCB);
-  mozquic_set_event_callback_closure(connection_ip6, &closure);
-  mozquic_start_server(connection_ip6);
-
-  config.originPort = port + 1;
-  config.ipv6 = 0;
-  mozquic_unstable_api1(&config, "forceAddressValidation", 1, nullptr);
-  mozquic_new_connection(&hrr, &config);
-  mozquic_set_event_callback(hrr, connEventCB);
-  mozquic_set_event_callback_closure(hrr, &closure);
-  mozquic_start_server(hrr);
-
-  config.ipv6 = 1;
-  mozquic_new_connection(&hrr6, &config);
-  mozquic_set_event_callback(hrr6, connEventCB);
-  mozquic_set_event_callback_closure(hrr6, &closure);
-  mozquic_start_server(hrr6);
-
-  closure.connections.push_back(connection_ip4);
-  closure.connections.push_back(connection_ip6);
-  closure.connections.push_back(hrr);
-  closure.connections.push_back(hrr6);
+  mozquic_connection_t* connection;
+  mozquic_new_connection(&connection, &config);
+  mozquic_set_event_callback(connection, connEventCB);
+  mozquic_set_event_callback_closure(connection, &closure);
+  mozquic_start_server(connection);
+  closure.connections.push_back(connection);
 
   std::cout << "server initialized" << std::endl;
-  return mozquic_osfd(connection_ip6);
+  return mozquic_osfd(connection);
 }
 
 void accept_quic::read_event(caf::io::network::newb_base *) {
   std::cout << "read_event called" << std::endl;
   for (auto c : closure.connections) {
-    if(mozquic_IO(c) != MOZQUIC_OK)
-      break;
+    mozquic_IO(c);
+    std::cout << "read_event: round done!" << std::endl;
   }
 }
 

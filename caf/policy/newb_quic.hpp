@@ -79,19 +79,11 @@ struct quic_transport : public io::network::transport_policy {
 
 struct accept_quic : public io::network::accept_policy {
   accept_quic() :
-    accept_policy(true),
-    connection_ip4{nullptr},
-    connection_ip6{nullptr},
-    hrr{nullptr},
-    hrr6{nullptr}
+    io::network::accept_policy(true)
     {};
 
   ~accept_quic() override {
     // destroy all pending connections
-    mozquic_destroy_connection(connection_ip4);
-    mozquic_destroy_connection(connection_ip6);
-    mozquic_destroy_connection(hrr);
-    mozquic_destroy_connection(hrr6);
     for (auto c : closure.connections) {
       mozquic_destroy_connection(c);
     }
@@ -108,11 +100,6 @@ struct accept_quic : public io::network::accept_policy {
   void init(io::network::newb_base& n) override;
 
   // connection state
-  mozquic_connection_t* connection_ip4;
-  mozquic_connection_t* connection_ip6;
-  mozquic_connection_t* hrr;
-  mozquic_connection_t* hrr6;
-
   closure_t closure;
 };
 
