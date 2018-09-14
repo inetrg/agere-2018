@@ -127,13 +127,13 @@ struct quic_acceptor
 class config : public actor_system_config {
 public:
   uint16_t port = 44444;
-  std::string host = "127.0.0.1";
+  std::string host = "localhost";
   bool is_server = false;
 
   config() {
     opt_group{custom_options_, "global"}
-            .add(port, "port,P", "set port")
-            .add(host, "host,H", "set host")
+            .add(port, "port,p", "set port")
+            .add(host, "host,h", "set host")
             .add(is_server, "server,s", "set server");
   }
 };

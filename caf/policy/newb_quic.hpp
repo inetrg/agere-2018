@@ -26,6 +26,7 @@ namespace caf {
 namespace policy {
 
 struct closure_t {
+  bool is_server = false;
   bool connected = false;
   int amount_read = 0;
   io::network::byte_buffer buffer;
@@ -84,13 +85,14 @@ struct accept_quic : public io::network::accept_policy {
 
   ~accept_quic() override {
     // destroy all pending connections
-    for (auto c : closure.connections) {
-      mozquic_destroy_connection(c);
-    }
+      for (auto c : closure.connections) {
+        mozquic_shutdown_connection(c);
+        mozquic_destroy_connection(c);
+      }
   }
 
   expected<io::network::native_socket>
-  create_socket(uint16_t port,const char* host,bool reuse = false) override;
+  create_socket(uint16_t port, const char* host, bool reuse = false) override;
 
   /// If `manual_read` is set to true, the acceptor will only call
   /// this function for new read event and let the policy handle everything
