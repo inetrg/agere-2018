@@ -174,10 +174,10 @@ void caf_main(actor_system& sys, const config& cfg) {
           std::cout << "got new connection" << std::endl;
           self->configure_read(msg.handle, io::receive_policy::exactly(chunk_size));
       },
-      [=](io::new_data_msg&) {
+      [=](io::new_data_msg& msg) {
+          // just print the new messages
           self->state.count += 1;
-          if (self->state.count % 1000 == 0)
-            std::cout << "received " << self->state.count << " messages" << std::endl;
+          std::cout << msg.buf.data() << std::endl;
       }
     };
   };
@@ -199,7 +199,12 @@ void caf_main(actor_system& sys, const config& cfg) {
                                                                true);
     // If I don't do this, our newb acceptor will never get events ...
     auto b = sys.middleman().spawn_server(dummy_broker, port + 1);
-    await_done();
+
+    std::string dummy;
+    std::cout << "press [enter] to quit" << std::endl;
+    getline(std::cin, dummy);
+    //self->send(server_ptr, quit_atom::value);
+    //await_done();
   } else {
     std::cout << "creating new client" << std::endl;
     auto client = make_client_newb<raw_newb, quic_transport,
@@ -212,6 +217,7 @@ void caf_main(actor_system& sys, const config& cfg) {
       self->send(client, send_atom::value, msg);
     }
     self->send(client, quit_atom::value);
+    await_done();
   }
 }
 

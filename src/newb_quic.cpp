@@ -77,7 +77,6 @@ quic_transport::quic_transport()
 
 io::network::rw_state quic_transport::read_some
 (io::network::newb_base*) {
-  std::cout << "read some called" << std::endl;
   CAF_LOG_TRACE("");
   int i = 0;
   while (++i < 20) {
@@ -91,18 +90,16 @@ io::network::rw_state quic_transport::read_some
   collected += result;
   received_bytes = collected;
   if (received_bytes)
-    std::cout << "received data: \n" << closure.buffer.data() << std::endl;
+    std::cout << "received data: " << closure.buffer.data() << std::endl;
   return io::network::rw_state::success;
 }
 
 bool quic_transport::should_deliver() {
-  std::cout << "should deliver called" << std::endl;
   CAF_LOG_DEBUG(CAF_ARG(collected) << CAF_ARG(read_threshold));
   return collected >= read_threshold;
 }
 
 void quic_transport::prepare_next_read(io::network::newb_base*) {
-  std::cout << "prepare next read called" << std::endl;
   collected = 0;
   received_bytes = 0;
   switch (rd_flag) {
@@ -128,14 +125,12 @@ void quic_transport::prepare_next_read(io::network::newb_base*) {
 }
 
 void quic_transport::configure_read(io::receive_policy::config config) {
-  std::cout << "configure read called" << std::endl;
   rd_flag = config.first;
   maximum = config.second;
 }
 
 io::network::rw_state quic_transport::write_some(io::network::newb_base*
 parent) {
-  std::cout << "write some called" << std::endl;
   CAF_LOG_TRACE("");
   mozquic_stream_t* stream;
   char msg[] = "";
@@ -157,7 +152,6 @@ parent) {
 }
 
 void quic_transport::prepare_next_write(io::network::newb_base* parent) {
-  std::cout << "prepare next write called" << std::endl;
   written = 0;
   send_buffer.clear();
   if (offline_buffer.empty()) {
@@ -170,7 +164,6 @@ void quic_transport::prepare_next_write(io::network::newb_base* parent) {
 }
 
 void quic_transport::flush(io::network::newb_base* parent) {
-  std::cout << "flush called" << std::endl;
   CAF_ASSERT(parent != nullptr);
   CAF_LOG_TRACE(CAF_ARG(offline_buffer.size()));
   if (!offline_buffer.empty() && !writing) {
@@ -185,8 +178,7 @@ int accept_new_connection(mozquic_connection_t* new_connection, closure_t* closu
   mozquic_set_event_callback(new_connection, connEventCB);
   mozquic_set_event_callback_closure(new_connection, closure);
   closure->connections.push_back(new_connection); // add this conn to all connections
-  std::cout << "new connections accepted. connected: "
-            << closure->connections.size() << std::endl;
+  std::cout << "new_connection: fd=" << mozquic_osfd(new_connection) << std::endl;
   return MOZQUIC_OK;
 }
 
@@ -194,8 +186,6 @@ int close_connection(mozquic_connection_t* c, closure_t* closure) {
   auto it = find(closure->connections.begin(), closure->connections.end(), c);
   if (it != closure->connections.end())
     closure->connections.erase(it);
-  std::cout << "server closed connection. connected: "
-       << closure->connections.size() << std::endl;
   return mozquic_destroy_connection(c);
 }
 
@@ -219,7 +209,7 @@ int connEventCB(void* closure, uint32_t event, void* param) {
       clo->buffer.resize(1024); // allocate enough space for reading into
                                    // the buffer
       do {
-        int code = mozquic_recv(stream, clo->buffer.data() + clo->amount_read,
+        int code = mozquic_recv(stream, clo->buffer.data(),
                 1024,
                 &received,
                 &fin);
@@ -228,15 +218,11 @@ int connEventCB(void* closure, uint32_t event, void* param) {
         clo->amount_read += received; // gather amount that was read
 
       } while(received > 0 && !fin);
-      std::cout << "data received: \n"
-                << clo->buffer.data() << std::endl;
       break;
     }
 
     case MOZQUIC_EVENT_CLOSE_CONNECTION:
     case MOZQUIC_EVENT_ERROR:
-       std::cout << (event == MOZQUIC_EVENT_ERROR ? "ERROR" : "CLOSE")
-                 << std::endl;
       close_connection(param, static_cast<closure_t*>(closure));
       return MOZQUIC_ERR_GENERAL;
 
@@ -255,7 +241,6 @@ int connEventCB(void* closure, uint32_t event, void* param) {
 expected<io::network::native_socket>
 quic_transport::connect(const std::string& host, uint16_t port,
                        optional<io::network::protocol::network>) {
-  std::cout << "connect called" << std::endl;
   // check for nss_config
   char nss_config[] = "/home/jakob/CLionProjects/measuring-newbs/nss-config/";
   if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
@@ -308,8 +293,6 @@ quic_transport::connect(const std::string& host, uint16_t port,
 
 expected<io::network::native_socket>
 accept_quic::create_socket(uint16_t port, const char*, bool) {
-  std::cout << "create socket called" << std::endl;
-
   // check for nss_config
   char nss_config[] = "/home/jakob/CLionProjects/measuring-newbs/nss-config/";
   if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
@@ -353,19 +336,13 @@ accept_quic::create_socket(uint16_t port, const char*, bool) {
                     "setup-start_server_ip6");
   closure.connections.push_back(connection);
 
-  std::cout << "server initialized\nsocket=" << mozquic_osfd(connection)
-            << "\nhost=" << config.originName
-            << "\nport=" << config.originPort << std::endl;
-
   return mozquic_osfd(connection);
 }
 
-void accept_quic::read_event(caf::io::network::newb_base *) {
-  std::cout << "read_event called" << std::endl;
-    for (auto c : closure.connections) {
-      mozquic_IO(c);
-      std::cout << "read_event: round done!" << std::endl;
-    }
+void accept_quic::read_event(caf::io::network::newb_base*) {
+  for (auto c : closure.connections) {
+    mozquic_IO(c);
+  }
 }
 
 void accept_quic::init(io::network::newb_base& n) {

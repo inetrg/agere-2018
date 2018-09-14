@@ -35,14 +35,15 @@ struct closure_t {
 
 struct quic_transport : public io::network::transport_policy {
   quic_transport();
-  explicit quic_transport(mozquic_connection_t* conn) : // this is for server.
-    quic_transport() {
+  explicit quic_transport(mozquic_connection_t* conn) : quic_transport() {
     connection = conn;
   };
 
   ~quic_transport() override {
-    mozquic_shutdown_connection(connection);
-    mozquic_destroy_connection(connection);
+    if (connection) {
+      mozquic_shutdown_connection(connection);
+      mozquic_destroy_connection(connection);
+    }
   }
 
   io::network::rw_state read_some(io::network::newb_base* parent) override;
@@ -85,10 +86,10 @@ struct accept_quic : public io::network::accept_policy {
 
   ~accept_quic() override {
     // destroy all pending connections
-      for (auto c : closure.connections) {
-        mozquic_shutdown_connection(c);
-        mozquic_destroy_connection(c);
-      }
+    for (auto c : closure.connections) {
+      mozquic_shutdown_connection(c);
+      mozquic_destroy_connection(c);
+    }
   }
 
   expected<io::network::native_socket>
@@ -100,6 +101,9 @@ struct accept_quic : public io::network::accept_policy {
   void read_event(io::network::newb_base*) override;
 
   void init(io::network::newb_base& n) override;
+
+  std::pair<io::network::native_socket, io::network::transport_policy_ptr>
+  accept(io::network::newb_base* parent) override;
 
   // connection state
   closure_t closure;
