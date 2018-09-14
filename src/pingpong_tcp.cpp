@@ -94,7 +94,8 @@ behavior tcp_client(stateful_broker<state>* self, connection_handle hdl) {
 }
 
 
-behavior raw_server(stateful_newb<new_raw_msg, state>* self) {
+behavior raw_server(stateful_newb<new_raw_msg, state>* self, actor responder) {
+  self->state.responder = responder;
   return {
     [=](new_raw_msg& msg) {
       uint32_t counter;
@@ -219,16 +220,21 @@ void caf_main(actor_system& sys, const config& cfg) {
     if (cfg.is_server) {
       std::cerr << "creating server" << std::endl;
       caf::io::network::accept_policy_ptr pol{new accept_tcp};
-      auto server = make_server<proto_t>(sys, raw_server, std::move(pol), port,
-                                         nullptr, true);
+      auto eserver = make_server<proto_t>(sys, raw_server, std::move(pol), port,
+                                         nullptr, true, self);
+      if (!eserver) {
+        std::cerr << "failed to start server on port " << port << std::endl;
+        return;
+      }
       /*
       auto server_ptr = make_server_newb<acceptor_t, accept_tcp>(sys, port,
                                                                  nullptr, true);
       server_ptr->responder = self;
+      */
+      auto server = std::move(*eserver);
       await_done("done");
       std::cerr << "stopping server" << std::endl;
-      server_ptr->stop();
-      */
+      server->stop();
     } else {
       std::cerr << "creating client" << std::endl;
       transport_policy_ptr pol{new tcp_transport};

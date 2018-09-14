@@ -16,6 +16,7 @@ using namespace caf::policy;
 
 namespace {
 
+/*
 using send_atom = atom_constant<atom("send")>;
 using quit_atom = atom_constant<atom("quit")>;
 using responder_atom = atom_constant<atom("responder")>;
@@ -148,6 +149,7 @@ struct udp_acceptor
 
   actor responder;
 };
+*/
 
 class config : public actor_system_config {
 public:
@@ -166,6 +168,7 @@ public:
 };
 
 void caf_main(actor_system& sys, const config& cfg) {
+  /*
   using namespace std::chrono;
   using proto_t = udp_protocol<reliability<policy::raw>>;
   //using proto_t = udp_protocol<reliability<ordering<policy::raw>>>;
@@ -235,6 +238,7 @@ void caf_main(actor_system& sys, const config& cfg) {
     std::cout << duration_cast<milliseconds>(end - start).count() << "ms" << std::endl;
   }
   std::abort();
+*/
 }
 
 } // namespace anonymous

@@ -11,14 +11,17 @@
 using namespace caf;
 using namespace caf::policy;
 
+/*
 using caf::io::network::default_multiplexer;
 using caf::io::network::invalid_native_socket;
 using caf::io::network::make_client_newb;
 using caf::io::network::make_server_newb;
 using caf::io::network::native_socket;
+*/
 
 namespace {
 
+/*
 using interval_atom = atom_constant<atom("interval")>;
 using ordering_atom = atom_constant<atom("ordering")>;
 using send_atom = atom_constant<atom("send")>;
@@ -107,36 +110,34 @@ struct raw_newb : public io::network::newb<new_basp_msg> {
       },
       [=](interval_atom) {
         // TODO: Reimplement this with other count method.
-        /*
-        if (running) {
-          delayed_send(this, std::chrono::seconds(1), interval_atom::value);
-          data.emplace_back(interval,
-                            transport->count,
-                            transport->offline_buffer.size());
-          interval_counter += 1;
-          if (interval_counter % 10 == 0) {
-            auto cnt = interval.count();
-            auto dec = cnt > 1000 ? 1000 : (cnt > 100 ? 100 : 10);
-            interval -= std::chrono::microseconds(dec);
-          }
-          transport->count = 0;
-          if (interval.count() <= 0)
-            running = false;
-        } else {
-          std::map<size_t, std::vector<size_t>> aggregate;
-          for (auto& t : data) {
-            auto expected = (1000000 / get<0>(t).count());
-            aggregate[expected].push_back(get<1>(t));
-          }
-          for (auto& p : aggregate) {
-            std::cerr << p.first;
-            for (auto v : p.second)
-              std::cerr << ", " << v;
-            std::cerr << std::endl;
-          }
-          send(this, quit_atom::value);
-        }
-        */
+        //if (running) {
+          //delayed_send(this, std::chrono::seconds(1), interval_atom::value);
+          //data.emplace_back(interval,
+                            //transport->count,
+                            //transport->offline_buffer.size());
+          //interval_counter += 1;
+          //if (interval_counter % 10 == 0) {
+            //auto cnt = interval.count();
+            //auto dec = cnt > 1000 ? 1000 : (cnt > 100 ? 100 : 10);
+            //interval -= std::chrono::microseconds(dec);
+          //}
+          //transport->count = 0;
+          //if (interval.count() <= 0)
+            //running = false;
+        //} else {
+          //std::map<size_t, std::vector<size_t>> aggregate;
+          //for (auto& t : data) {
+            //auto expected = (1000000 / get<0>(t).count());
+            //aggregate[expected].push_back(get<1>(t));
+          //}
+          //for (auto& p : aggregate) {
+            //std::cerr << p.first;
+            //for (auto v : p.second)
+              //std::cerr << ", " << v;
+            //std::cerr << std::endl;
+          //}
+          //send(this, quit_atom::value);
+        //}
       },
       [=](quit_atom) {
         std::cout << "got quit message" << std::endl;
@@ -196,6 +197,7 @@ struct udp_acceptor
 
   actor responder;
 };
+*/
 
 class config : public actor_system_config {
 public:
@@ -212,6 +214,7 @@ public:
 };
 
 void caf_main(actor_system& sys, const config& cfg) {
+  /*
   using policy_t = udp_protocol<ordering<datagram_basp>>;
   using acceptor_t = udp_acceptor<policy_t>;
   const char* host = cfg.host.c_str();
@@ -280,6 +283,7 @@ void caf_main(actor_system& sys, const config& cfg) {
     await_done("done");
     std::abort();
   }
+*/
 }
 
 } // namespace anonymous
