@@ -1,4 +1,3 @@
-
 #include "caf/all.hpp"
 #include "caf/binary_deserializer.hpp"
 #include "caf/binary_serializer.hpp"
@@ -10,6 +9,7 @@
 
 using namespace caf;
 
+/*
 using caf::io::network::default_multiplexer;
 using caf::io::network::invalid_native_socket;
 using caf::io::network::make_client_newb;
@@ -18,9 +18,11 @@ using caf::io::network::native_socket;
 using caf::policy::accept_tcp;
 using caf::policy::tcp_protocol;
 using caf::policy::tcp_transport;
+*/
 
 namespace {
 
+/*
 using interval_atom = atom_constant<atom("interval")>;
 using ordering_atom = atom_constant<atom("ordering")>;
 using send_atom = atom_constant<atom("send")>;
@@ -76,36 +78,34 @@ struct raw_newb : public io::network::newb<policy::new_raw_msg> {
       },
       [=](interval_atom) {
         // Reimplement this with other count method.
-        /*
-        if (running) {
-          delayed_send(this, std::chrono::seconds(1), interval_atom::value);
-          data.emplace_back(interval,
-                            transport->count,
-                            transport->offline_buffer.size());
-          interval_counter += 1;
-          if (interval_counter % 10 == 0) {
-            auto cnt = interval.count();
-            auto dec = cnt > 1000 ? 1000 : (cnt > 100 ? 100 : 10);
-            interval -= std::chrono::microseconds(dec);
-          }
-          transport->count = 0;
-          if (interval.count() <= 0)
-            running = false;
-        } else {
-          std::map<size_t, std::vector<size_t>> aggregate;
-          for (auto& t : data) {
-            auto expected = (1000000 / get<0>(t).count());
-            aggregate[expected].push_back(get<1>(t));
-          }
-          for (auto& p : aggregate) {
-            std::cerr << p.first;
-            for (auto v : p.second)
-              std::cerr << ", " << v;
-            std::cerr << std::endl;
-          }
-          send(this, quit_atom::value);
-        }
-        */
+        //if (running) {
+          //delayed_send(this, std::chrono::seconds(1), interval_atom::value);
+          //data.emplace_back(interval,
+                            //transport->count,
+                            //transport->offline_buffer.size());
+          //interval_counter += 1;
+          //if (interval_counter % 10 == 0) {
+            //auto cnt = interval.count();
+            //auto dec = cnt > 1000 ? 1000 : (cnt > 100 ? 100 : 10);
+            //interval -= std::chrono::microseconds(dec);
+          //}
+          //transport->count = 0;
+          //if (interval.count() <= 0)
+            //running = false;
+        //} else {
+          //std::map<size_t, std::vector<size_t>> aggregate;
+          //for (auto& t : data) {
+            //auto expected = (1000000 / get<0>(t).count());
+            //aggregate[expected].push_back(get<1>(t));
+          //}
+          //for (auto& p : aggregate) {
+            //std::cerr << p.first;
+            //for (auto v : p.second)
+              //std::cerr << ", " << v;
+            //std::cerr << std::endl;
+          //}
+          //send(this, quit_atom::value);
+        //}
       },
       [=](quit_atom) {
         std::cout << "got quit message" << std::endl;
@@ -157,6 +157,7 @@ struct tcp_acceptor
 
   actor responder;
 };
+*/
 
 class config : public actor_system_config {
 public:
@@ -177,6 +178,7 @@ struct state {
 };
 
 void caf_main(actor_system& sys, const config& cfg) {
+  /*
   using acceptor_t = tcp_acceptor<tcp_protocol<policy::raw>>;
   const char* host = cfg.host.c_str();
   const uint16_t port = cfg.port;
@@ -243,6 +245,7 @@ void caf_main(actor_system& sys, const config& cfg) {
     self->send(client, interval_atom::value);
     await_done();
   }
+*/
 }
 
 } // namespace anonymous

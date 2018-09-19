@@ -85,6 +85,7 @@ def main():
     parser.add_argument('-d', '--delay',   help='', type=int, default=0)
     parser.add_argument('-r', '--runs',    help='', type=int, default=1)
     parser.add_argument('-T', '--threads', help='', type=int, default=1)
+    parser.add_argument('-o', '--min-rto', help='', type=int, default=40)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-t', '--tcp', help='', action='store_true')
     group.add_argument('-u', '--udp', help='', action='store_true')
@@ -92,8 +93,13 @@ def main():
     run = 0
     max_runs = args['runs']
     while run < max_runs:
+        is_tcp = args['tcp']
         loss = args['loss']
         delay = args['delay']
+        min_rto = args['min-rto']
+        proto = 'udp'
+        if is_tcp:
+            proto = 'tcp'
         print(">> Run {} with {}% loss and {}ms delay".format(run, loss, delay))
         net = Mininet(topo = TwoHostsTopology(ls=loss), link=TCLink, host=CPULimitedHost)
         net.start()
@@ -103,22 +109,24 @@ def main():
         h1 = net.get('h1')
         set_delay(h1, delay)
         set_loss(h1, loss)
-        set_min_rto(h1, 40)
+        if is_tcp:
+            set_min_rto(h1, min_rto)
         # host 2
         h2 = net.get('h2')
         set_delay(h2, delay)
         set_loss(h2, loss)
-        set_min_rto(h2, 40)
+        if is_tcp:
+            set_min_rto(h2, min_rto)
 
         files = {}
         # servererr = './server-{}-{}-{}.err'.format(loss, delay, run)
         # serverout = './server-{}-{}-{}.out'.format(loss, delay, run)
         # clienterr = './client-{}-{}-{}.err'.format(loss, delay, run)
         # clientout = './client-{}-{}-{}.out'.format(loss, delay, run)
-        servererr = open('./server-{}-{}-{}.err'.format(loss, delay, run), 'w')
-        serverout = open('./server-{}-{}-{}.out'.format(loss, delay, run), 'w')
-        clienterr = open('./client-{}-{}-{}.err'.format(loss, delay, run), 'w')
-        clientout = open('./client-{}-{}-{}.out'.format(loss, delay, run), 'w')
+        servererr = open('./{}-server-{}-{}-{}.err'.format(proto, loss, delay, run), 'w')
+        serverout = open('./{}-server-{}-{}-{}.out'.format(proto, loss, delay, run), 'w')
+        clienterr = open('./{}-client-{}-{}-{}.err'.format(proto, loss, delay, run), 'w')
+        clientout = open('./{}-client-{}-{}-{}.out'.format(proto, loss, delay, run), 'w')
 
         caf_opts = '--scheduler.max-threads={}'.format(args['threads'])
         prog = 'pingpong'

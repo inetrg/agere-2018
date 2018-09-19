@@ -94,7 +94,8 @@ behavior tcp_client(stateful_broker<state>* self, connection_handle hdl) {
 }
 
 
-behavior raw_server(stateful_newb<new_raw_msg, state>* self) {
+behavior raw_server(stateful_newb<new_raw_msg, state>* self, actor responder) {
+  self->state.responder = responder;
   return {
     [=](new_raw_msg& msg) {
       uint32_t counter;
@@ -152,6 +153,7 @@ behavior raw_client(stateful_newb<new_raw_msg, state>* self) {
   };
 }
 
+/*
 template <class ProtocolPolicy>
 struct tcp_acceptor
     : public io::network::newb_acceptor<typename ProtocolPolicy::message_type> {
@@ -179,6 +181,7 @@ struct tcp_acceptor
 
   actor responder;
 };
+*/
 
 class config : public actor_system_config {
 public:
@@ -201,7 +204,7 @@ public:
 void caf_main(actor_system& sys, const config& cfg) {
   using namespace std::chrono;
   using proto_t = tcp_protocol<raw>;
-  using acceptor_t = tcp_acceptor<proto_t>;
+  //using acceptor_t = tcp_acceptor<proto_t>;
   const char* host = cfg.host.c_str();
   const uint16_t port = cfg.port;
   scoped_actor self{sys};
@@ -216,12 +219,22 @@ void caf_main(actor_system& sys, const config& cfg) {
   if (!cfg.traditional) {
     if (cfg.is_server) {
       std::cerr << "creating server" << std::endl;
+      caf::io::network::accept_policy_ptr pol{new accept_tcp};
+      auto eserver = make_server<proto_t>(sys, raw_server, std::move(pol), port,
+                                         nullptr, true, self);
+      if (!eserver) {
+        std::cerr << "failed to start server on port " << port << std::endl;
+        return;
+      }
+      /*
       auto server_ptr = make_server_newb<acceptor_t, accept_tcp>(sys, port,
                                                                  nullptr, true);
       server_ptr->responder = self;
+      */
+      auto server = std::move(*eserver);
       await_done("done");
       std::cerr << "stopping server" << std::endl;
-      server_ptr->stop();
+      server->stop();
     } else {
       std::cerr << "creating client" << std::endl;
       transport_policy_ptr pol{new tcp_transport};
