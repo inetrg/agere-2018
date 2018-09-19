@@ -2,7 +2,7 @@
 #include "caf/binary_deserializer.hpp"
 #include "caf/binary_serializer.hpp"
 #include "caf/detail/call_cfun.hpp"
-#include "caf/io/network/newb.hpp"
+#include "caf/io/newb.hpp"
 #include "caf/logger.hpp"
 #include "caf/policy/newb_basp.hpp"
 #include "caf/policy/newb_ordering.hpp"

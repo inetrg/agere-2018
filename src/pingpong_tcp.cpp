@@ -2,7 +2,7 @@
 #include "caf/binary_deserializer.hpp"
 #include "caf/binary_serializer.hpp"
 #include "caf/detail/call_cfun.hpp"
-#include "caf/io/network/newb.hpp"
+#include "caf/io/newb.hpp"
 #include "caf/logger.hpp"
 #include "caf/policy/newb_tcp.hpp"
 #include "caf/policy/newb_raw.hpp"
@@ -219,7 +219,7 @@ void caf_main(actor_system& sys, const config& cfg) {
   if (!cfg.traditional) {
     if (cfg.is_server) {
       std::cerr << "creating server" << std::endl;
-      caf::io::network::accept_policy_ptr pol{new accept_tcp};
+      accept_ptr pol{new accept_tcp};
       auto eserver = make_server<proto_t>(sys, raw_server, std::move(pol), port,
                                          nullptr, true, self);
       if (!eserver) {
@@ -237,7 +237,7 @@ void caf_main(actor_system& sys, const config& cfg) {
       server->stop();
     } else {
       std::cerr << "creating client" << std::endl;
-      transport_policy_ptr pol{new tcp_transport};
+      transport_ptr pol{new tcp_transport};
       auto eclient = spawn_client<proto_t>(sys, raw_client, std::move(pol), host, port);
       if (!eclient) {
         std::cerr << "failed to start client for " << host << ":" << port << std::endl;
