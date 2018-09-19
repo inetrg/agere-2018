@@ -64,14 +64,15 @@ namespace policy {
 
 int connEventCB(void* closure, uint32_t event, void* param);
 
-quic_transport::quic_transport()
+quic_transport::quic_transport(mozquic_connection_t* conn)
         : read_threshold{0},
           collected{0},
           maximum{0},
+          rd_flag{io::receive_policy_flag::exactly},
           writing{false},
           written{0},
-          connection{nullptr},
-          closure{} {
+          connection{conn},
+          closure{send_buffer, receive_buffer} {
   // nop
 }
 
@@ -90,7 +91,7 @@ io::network::rw_state quic_transport::read_some
   collected += result;
   received_bytes = collected;
   if (received_bytes)
-    std::cout << "received data: " << closure.buffer.data() << std::endl;
+    std::cout << "received data: " << closure.receive_buffer.data() << std::endl;
   return io::network::rw_state::success;
 }
 
@@ -174,42 +175,26 @@ void quic_transport::flush(io::network::newb_base* parent) {
   }
 }
 
-int accept_new_connection(mozquic_connection_t* new_connection, closure_t* closure) {
-  mozquic_set_event_callback(new_connection, connEventCB);
-  mozquic_set_event_callback_closure(new_connection, closure);
-  closure->connections.push_back(new_connection); // add this conn to all connections
-  std::cout << "new_connection: fd=" << mozquic_osfd(new_connection) << std::endl;
-  return MOZQUIC_OK;
-}
-
-int close_connection(mozquic_connection_t* c, closure_t* closure) {
-  auto it = find(closure->connections.begin(), closure->connections.end(), c);
-  if (it != closure->connections.end())
-    closure->connections.erase(it);
-  return mozquic_destroy_connection(c);
-}
-
 int connEventCB(void* closure, uint32_t event, void* param) {
-  auto clo = static_cast<closure_t *>(closure);
-
   switch (event) {
     case MOZQUIC_EVENT_CONNECTED: {
-      if(clo->is_server) break;
+      auto clo = static_cast<client_closure *>(closure);
       std::cout << "connected" << std::endl;
       clo->connected = true;
       break;
     }
 
     case MOZQUIC_EVENT_NEW_STREAM_DATA: {
+      auto clo = static_cast<client_closure *>(closure);
       mozquic_stream_t *stream = param;
       if (mozquic_get_streamid(stream) & 0x3)
         break;
       uint32_t received = 0;
       int fin = 0;
-      clo->buffer.resize(1024); // allocate enough space for reading into
-                                   // the buffer
+      clo->receive_buffer.resize(1024); // allocate enough space for reading into
+                                   // the receive_buffer
       do {
-        int code = mozquic_recv(stream, clo->buffer.data(),
+        int code = mozquic_recv(stream, clo->receive_buffer.data(),
                 1024,
                 &received,
                 &fin);
@@ -223,13 +208,15 @@ int connEventCB(void* closure, uint32_t event, void* param) {
 
     case MOZQUIC_EVENT_CLOSE_CONNECTION:
     case MOZQUIC_EVENT_ERROR:
-      close_connection(param, static_cast<closure_t*>(closure));
-      return MOZQUIC_ERR_GENERAL;
+      return mozquic_destroy_connection(param);
 
-    case MOZQUIC_EVENT_ACCEPT_NEW_CONNECTION:
-      if(clo->is_server)
-        accept_new_connection(param, static_cast<closure_t*>(closure));
+    case MOZQUIC_EVENT_ACCEPT_NEW_CONNECTION: {
+      auto clo = static_cast<server_closure*>(closure);
+      mozquic_set_event_callback(param, connEventCB);
+      mozquic_set_event_callback_closure(param, closure);
+      clo->new_connection = param;
       break;
+    }
 
     default:
       break;
@@ -300,7 +287,6 @@ accept_quic::create_socket(uint16_t port, const char*, bool) {
     return io::network::invalid_native_socket;
   }
 
-  closure.is_server = true;
   mozquic_config_t config;
   memset(&config, 0, sizeof(mozquic_config_t));
   config.originName = "foo.example.com";
@@ -323,26 +309,63 @@ accept_quic::create_socket(uint16_t port, const char*, bool) {
   CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr),
                     "setup-0rtt");
 
-  // one ipv6 connection should be enough -- example uses 1 ipv4 1 ipv6
-  // 1 hrr?! and 1 hrr6 connection for some reason.
-  mozquic_connection_t* connection = nullptr;
+  // setting up the connection
   CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection, &config),
                     "setup-new_conn_ip6");
   CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection, connEventCB),
                     "setup-event_cb_ip6");
   CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection, &closure),
-                    "set callback closure error");
+                    "setup-event_cb_closure");
   CHECK_MOZQUIC_ERR(mozquic_start_server(connection),
                     "setup-start_server_ip6");
-  closure.connections.push_back(connection);
+  std::cout << "server initialized - Listening on port " << config.originPort << " with fd = " << mozquic_osfd(connection) << std::endl;
 
   return mozquic_osfd(connection);
 }
 
 void accept_quic::read_event(caf::io::network::newb_base*) {
-  for (auto c : closure.connections) {
-    mozquic_IO(c);
+  using namespace io::network;
+  int i = 0;
+  do {
+    mozquic_IO(connection);
+    usleep (1000); // this is for handleio todo
+  } while(++i < 20);
+
+  if(closure.new_connection) {
+    int fd = mozquic_osfd(closure.new_connection);
+    transport_policy_ptr transport{new quic_transport{closure.new_connection}};
+    auto en = create_newb(fd, std::move(transport));
+    if (!en) {
+      return;
+    }
+    auto ptr = caf::actor_cast<caf::abstract_actor*>(*en);
+    CAF_ASSERT(ptr != nullptr);
+    auto& ref = dynamic_cast<newb<message>&>(*ptr);
+    init(ref);
+    std::cout << "new connection accepted." << std::endl;
+    closure.new_connection = nullptr;
   }
+}
+
+std::pair<io::network::native_socket, io::network::transport_policy_ptr>
+accept_quic::accept(io::network::newb_base*) {
+  using namespace io::network;
+  int i = 0;
+  do {
+    mozquic_IO(connection);
+    usleep (1000); // this is for handleio todo
+  } while(++i < 20);
+
+  if(closure.new_connection) {
+    std::pair<native_socket, transport_policy_ptr> ret(
+            mozquic_osfd(closure.new_connection),
+            new quic_transport{closure.new_connection}
+            );
+    closure.new_connection = nullptr;
+    std::cout << "new connection accepted." << std::endl;
+    return ret;
+  }
+  return {0, nullptr};
 }
 
 void accept_quic::init(io::network::newb_base& n) {

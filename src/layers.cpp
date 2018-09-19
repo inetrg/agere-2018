@@ -243,7 +243,7 @@ static void BM_receive_impl(benchmark::State& state, bool wseq, bool wsize) {
   tptr->write_size = wsize;
   ref.transport.reset(tptr);
   ref.protocol.reset(new proto_t(&ref));
-  // prepare receive buffer
+  // prepare receive receive_buffer
   size_t packet_size = state.range(0);
   auto hw = caf::make_callback([&](byte_buffer& buf) -> error {
     binary_serializer bs(sys, buf);
