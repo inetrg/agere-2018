@@ -25,19 +25,26 @@
 namespace caf {
 namespace policy {
 
-struct closure_t {
+struct client_closure {
+  client_closure(io::network::byte_buffer& wr_buf, io::network::byte_buffer& rec_buf) :
+    write_buffer(wr_buf),
+    receive_buffer(rec_buf) {
+
+  };
+
   bool is_server = false;
   bool connected = false;
   int amount_read = 0;
-  io::network::byte_buffer buffer;
-  std::vector<mozquic_connection_t*> connections;
+  io::network::byte_buffer& write_buffer;
+  io::network::byte_buffer& receive_buffer;
+};
+
+struct server_closure {
+    mozquic_connection_t* new_connection = nullptr;
 };
 
 struct quic_transport : public io::network::transport_policy {
-  quic_transport();
-  explicit quic_transport(mozquic_connection_t* conn) : quic_transport() {
-    connection = conn;
-  };
+  quic_transport(mozquic_connection_t* conn = nullptr);
 
   ~quic_transport() override {
     if (connection) {
@@ -76,24 +83,28 @@ struct quic_transport : public io::network::transport_policy {
 
   // connection state
   mozquic_connection_t* connection;
-  closure_t closure;
+  client_closure closure;
 };
 
+// only server uses acceptors
 struct accept_quic : public io::network::accept_policy {
   accept_quic() :
-    io::network::accept_policy(true)
+    io::network::accept_policy(false) // true if reading is handled manually
     {};
 
   ~accept_quic() override {
     // destroy all pending connections
-    for (auto c : closure.connections) {
-      mozquic_shutdown_connection(c);
-      mozquic_destroy_connection(c);
+    if (connection) {
+      mozquic_shutdown_connection(connection);
+      mozquic_destroy_connection(connection);
     }
   }
 
   expected<io::network::native_socket>
   create_socket(uint16_t port, const char* host, bool reuse = false) override;
+
+  std::pair<io::network::native_socket, io::network::transport_policy_ptr>
+    accept(io::network::newb_base* parent) override;
 
   /// If `manual_read` is set to true, the acceptor will only call
   /// this function for new read event and let the policy handle everything
@@ -102,11 +113,28 @@ struct accept_quic : public io::network::accept_policy {
 
   void init(io::network::newb_base& n) override;
 
-  std::pair<io::network::native_socket, io::network::transport_policy_ptr>
-  accept(io::network::newb_base* parent) override;
+  expected<actor> create_newb(native_socket sockfd,
+                              io::network::transport_policy_ptr pol) override {
+    CAF_LOG_TRACE(CAF_ARG(sockfd));
+    auto n = io::network::make_newb<raw_newb>(this->backend().system(), sockfd);
+    auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
+    if (ptr == nullptr)
+      return sec::runtime_error;
+    auto& ref = dynamic_cast<raw_newb&>(*ptr);
+    // TODO: Transport has to be assigned before protocol ... which sucks.
+    //  (basp protocol calls configure read which accesses the transport.)
+    ref.transport = std::move(pol);
+    ref.protocol.reset(new ProtocolPolicy(&ref));
+    ref.responder = responder;
+    ref.configure_read(io::receive_policy::exactly(1000));
+    // TODO: Just a workaround.
+    anon_send(responder, n);
+    return n;
+  }
 
   // connection state
-  closure_t closure;
+  mozquic_connection_t* connection;
+  server_closure closure;
 };
 
 template <class T>
