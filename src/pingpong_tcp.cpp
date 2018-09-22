@@ -222,7 +222,7 @@ void caf_main(actor_system& sys, const config& cfg) {
   if (!cfg.traditional) {
     if (cfg.is_server) {
       std::cerr << "creating server" << std::endl;
-      accept_ptr pol{new accept_tcp};
+      accept_ptr<policy::new_raw_msg> pol{new accept_tcp<policy::new_raw_msg>};
       auto eserver = make_server<proto_t>(sys, raw_server, std::move(pol), port,
                                          nullptr, true, self);
       if (!eserver) {
