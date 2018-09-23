@@ -2,7 +2,7 @@
 #include "caf/binary_deserializer.hpp"
 #include "caf/binary_serializer.hpp"
 #include "caf/detail/call_cfun.hpp"
-#include "caf/io/network/newb.hpp"
+#include "caf/io/newb.hpp"
 #include "caf/logger.hpp"
 #include "caf/policy/newb_tcp.hpp"
 #include "caf/policy/newb_raw.hpp"
@@ -35,7 +35,8 @@ behavior tcp_server(stateful_broker<state>* self) {
       self->state.responder = responder;
     },
     [=](const new_connection_msg& msg) {
-      self->configure_read(msg.handle, io::receive_policy::exactly(sizeof(uint32_t)));
+      self->configure_read(msg.handle,
+                           io::receive_policy::exactly(sizeof(uint32_t)));
       self->state.other = msg.handle;
     },
     [=](new_data_msg& msg) {
@@ -167,7 +168,9 @@ struct tcp_acceptor
   expected<actor> create_newb(native_socket sockfd,
                               io::network::transport_policy_ptr pol) override {
     CAF_LOG_TRACE(CAF_ARG(sockfd));
-    auto n = io::network::spawn_newb<ProtocolPolicy>(this->backend().system(), raw_server, std::move(pol), sockfd);
+    auto n = io::network::spawn_newb<ProtocolPolicy>(this->backend().system(),
+                                                     raw_server, std::move(pol),
+                                                     sockfd);
     auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
     if (ptr == nullptr) {
       std::cerr << "failed to spawn newb" << std::endl;
@@ -188,7 +191,7 @@ public:
   uint16_t port = 12345;
   std::string host = "127.0.0.1";
   bool is_server = false;
-  size_t messages = 10000;
+  size_t messages = 2000;
   bool traditional = false;
 
   config() {
@@ -219,36 +222,35 @@ void caf_main(actor_system& sys, const config& cfg) {
   if (!cfg.traditional) {
     if (cfg.is_server) {
       std::cerr << "creating server" << std::endl;
-      caf::io::network::accept_policy_ptr pol{new accept_tcp};
+      accept_ptr<policy::new_raw_msg> pol{new accept_tcp<policy::new_raw_msg>};
       auto eserver = make_server<proto_t>(sys, raw_server, std::move(pol), port,
                                          nullptr, true, self);
       if (!eserver) {
         std::cerr << "failed to start server on port " << port << std::endl;
         return;
       }
-      /*
-      auto server_ptr = make_server_newb<acceptor_t, accept_tcp>(sys, port,
-                                                                 nullptr, true);
-      server_ptr->responder = self;
-      */
       auto server = std::move(*eserver);
       await_done("done");
       std::cerr << "stopping server" << std::endl;
       server->stop();
     } else {
       std::cerr << "creating client" << std::endl;
-      transport_policy_ptr pol{new tcp_transport};
-      auto eclient = spawn_client<proto_t>(sys, raw_client, std::move(pol), host, port);
+      transport_ptr pol{new tcp_transport};
+      auto eclient = spawn_client<proto_t>(sys, raw_client, std::move(pol),
+                                           host, port);
       if (!eclient) {
-        std::cerr << "failed to start client for " << host << ":" << port << std::endl;
+        std::cerr << "failed to start client for " << host << ":" << port
+                  << std::endl;
         return;
       }
       auto client = std::move(*eclient);
       auto start = system_clock::now();
-      self->send(client, start_atom::value, size_t(cfg.messages), actor_cast<actor>(self));
+      self->send(client, start_atom::value, size_t(cfg.messages),
+                 actor_cast<actor>(self));
       await_done("done");
       auto end = system_clock::now();
-      std::cout << duration_cast<milliseconds>(end - start).count() << "ms" << std::endl;
+      std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
+                << std::endl;
       //self->send(client, exit_reason::user_shutdown);
     }
   } else {
@@ -261,10 +263,12 @@ void caf_main(actor_system& sys, const config& cfg) {
       std::cerr << "creating traditional client" << std::endl;
       auto ec = sys.middleman().spawn_client(tcp_client, host, port);
       auto start = system_clock::now();
-      self->send(*ec, start_atom::value, size_t(cfg.messages), actor_cast<actor>(self));
+      self->send(*ec, start_atom::value, size_t(cfg.messages),
+                 actor_cast<actor>(self));
       await_done("done");
       auto end = system_clock::now();
-      std::cout << duration_cast<milliseconds>(end - start).count() << "ms" << std::endl;
+      std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
+                << std::endl;
     }
   }
 }

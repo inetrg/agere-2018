@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
-mininet_path = '/usr/local/lib/python2.7/dist-packages/mininet-2.2.2-py2.7.egg'
+#mininet_path = '/usr/local/lib/python2.7/dist-packages/mininet-2.2.2-py2.7.egg'
+mininet_path = '/usr/local/lib/python2.7/dist-packages/mininet-2.3.0d4-py2.7.egg'
 
 import time
 import sys
@@ -85,7 +86,7 @@ def main():
     parser.add_argument('-d', '--delay',   help='', type=int, default=0)
     parser.add_argument('-r', '--runs',    help='', type=int, default=1)
     parser.add_argument('-T', '--threads', help='', type=int, default=1)
-    parser.add_argument('-o', '--min-rto', help='', type=int, default=40)
+    parser.add_argument('-o', '--rto',     help='', type=int, default=40)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-t', '--tcp', help='', action='store_true')
     group.add_argument('-u', '--udp', help='', action='store_true')
@@ -96,7 +97,7 @@ def main():
         is_tcp = args['tcp']
         loss = args['loss']
         delay = args['delay']
-        min_rto = args['min-rto']
+        min_rto = args['rto']
         proto = 'udp'
         if is_tcp:
             proto = 'tcp'

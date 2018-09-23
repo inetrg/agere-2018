@@ -7,10 +7,14 @@
 #ifndef MOZQUIC_EXAMPLE_MOZQUIC_HELPER_H
 #define MOZQUIC_EXAMPLE_MOZQUIC_HELPER_H
 
-static bool should_check = true;
+static bool check_flag = true;
+
+static void should_check(bool flag) {
+  check_flag = flag;
+}
 
 #define CHECK_MOZQUIC_ERR(err, msg) \
-if (err && should_check) {\
+if (err && check_flag) {\
   switch(err) { \
     case MOZQUIC_ERR_GENERAL: \
       std::cerr << msg << ": MOZQUIC_ERR_GENERAL" << std::endl;\

@@ -2,7 +2,7 @@
 #include <caf/binary_deserializer.hpp>
 #include <caf/binary_serializer.hpp>
 #include <caf/detail/call_cfun.hpp>
-#include <caf/io/network/newb.hpp>
+#include <caf/io/newb.hpp>
 #include <caf/logger.hpp>
 #include <caf/policy/newb_basp.hpp>
 #include <caf/policy/newb_ordering.hpp>
@@ -13,18 +13,19 @@
 #include <benchmark/benchmark.h>
 
 using namespace caf;
-using namespace caf::policy;
+using namespace caf::io;
 using namespace caf::io::network;
+using namespace caf::policy;
 
 namespace {
 
 using ordering_atom = atom_constant<atom("ordering")>;
 
 constexpr auto from = 6;
-constexpr auto to = 13;
+constexpr auto to = 6; //13;
 
 // Receiving is currently datagram only.
-struct dummy_transport : public transport_policy {
+struct dummy_transport : public transport {
   dummy_transport(size_t payload_len)
     : maximum(std::numeric_limits<uint16_t>::max()),
       writing(false),
@@ -111,7 +112,7 @@ struct dummy_transport : public transport_policy {
 
   expected<native_socket>
   connect(const std::string&, uint16_t,
-          optional<protocol::network> = none) override {
+          optional<network::protocol::network> = none) override {
     return invalid_native_socket;
   }
 
@@ -133,30 +134,23 @@ struct dummy_transport : public transport_policy {
   uint32_t upayload_len;
 };
 
-template <class Message>
-struct dummy_newb : public newb<Message> {
-  using message_type = Message;
-
-  dummy_newb(caf::actor_config& cfg, default_multiplexer& dm,
-             native_socket sockfd)
-      : newb<message_type>(cfg, dm, sockfd) {
-    CAF_LOG_TRACE("");
-    scheduled_actor::set_timeout_handler([&](timeout_msg&) {
-      // Drop timeouts.
-    });
-  }
-
-  behavior make_behavior() override {
-    this->set_default_handler(print_and_drop);
-    return {
-      [=](const message_type&) {
-        received = true;
-      }
-    };
-  }
-
+struct dummy_state {
   bool received;
 };
+
+template <class Message>
+behavior dummy_newb(stateful_newb<Message, dummy_state>* self) {
+  self->set_default_handler(print_and_drop);
+  self->state.received = false;
+  self->set_timeout_handler([&](timeout_msg&) {
+    // Drop timeouts.
+  });
+  return {
+    [=](const Message&) {
+      self->state.received = true;
+    }
+  };
+}
 
 class config : public actor_system_config {
 public:
@@ -182,16 +176,15 @@ public:
 
 template <class Message, class Protocol>
 static void BM_send(benchmark::State& state) {
-  using newb_t = dummy_newb<Message>;
   config cfg;
   actor_system sys{cfg};
   auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
-  auto n = make_newb<newb_t>(sys, *esock);
+  size_t packet_size = static_cast<size_t>(state.range(0));
+  transport_ptr trans{new dummy_transport(packet_size)};
+  auto n = spawn_newb<Protocol, hidden>(sys, dummy_newb<Message>,
+                                        std::move(trans), *esock);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
-  auto& ref = dynamic_cast<newb_t&>(*ptr);
-  ref.transport.reset(new dummy_transport(state.range(0)));
-  ref.protocol.reset(new Protocol(&ref));
-  size_t packet_size = state.range(0);
+  auto& ref = dynamic_cast<newb<Message>&>(*ptr);
   for (auto _ : state) {
     auto hw = caf::make_callback([&](byte_buffer& buf) -> error {
       binary_serializer bs(sys, buf);
@@ -209,6 +202,7 @@ static void BM_send(benchmark::State& state) {
     }
     ref.write_event();
   }
+  ref.stop();
 }
 
 BENCHMARK_TEMPLATE(BM_send, new_raw_msg, tcp_protocol<raw>)
@@ -229,16 +223,15 @@ BENCHMARK_TEMPLATE(BM_send, new_basp_msg, udp_protocol<ordering<datagram_basp>>)
 
 template <class Message, class Protocol>
 static void BM_receive_impl(benchmark::State& state, bool wseq, bool wsize) {
-  using message_t = Message;
-  using newb_t = dummy_newb<message_t>;
-  using proto_t = Protocol;
   config cfg;
   actor_system sys{cfg};
   auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
-  auto n = make_newb<newb_t>(sys, *esock);
-  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
-  auto& ref = dynamic_cast<newb_t&>(*ptr);
   auto tptr = new dummy_transport(state.range(0));
+  transport_ptr trans{tptr};
+  auto n = spawn_newb<Protocol, hidden>(sys, dummy_newb<Message>,
+                                        std::move(trans), *esock);
+  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
+  auto& ref = dynamic_cast<stateful_newb<Message, dummy_state>&>(*ptr);
   tptr->write_seq = wseq;
   tptr->write_size = wsize;
   ref.transport.reset(tptr);
@@ -256,12 +249,13 @@ static void BM_receive_impl(benchmark::State& state, bool wseq, bool wsize) {
     whdl.buf->resize(start + packet_size);
     std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
   }
-  ref.transport->receive_buffer = ref.transport->send_buffer;
+  ref.trans->receive_buffer = ref.trans->send_buffer;
   for (auto _ : state) {
-    ref.received = false;
-    while (!ref.received)
+    ref.state.received = false;
+    while (!ref.state.received)
       ref.read_event();
   }
+  ref.stop();
 }
 
 static void BM_receive_udp_raw(benchmark::State& state) {
@@ -305,7 +299,7 @@ enum instruction : int {
 };
 
 // For the ordering test
-struct dummy_ordering_transport : public transport_policy {
+struct dummy_ordering_transport : public transport {
   dummy_ordering_transport()
     : maximum(std::numeric_limits<uint16_t>::max()),
       writing(false),
@@ -400,7 +394,7 @@ struct dummy_ordering_transport : public transport_policy {
 
   expected<native_socket>
   connect(const std::string&, uint16_t,
-          optional<protocol::network> = none) override {
+          optional<network::protocol::network> = none) override {
     return invalid_native_socket;
   }
 
@@ -424,17 +418,18 @@ struct dummy_ordering_transport : public transport_policy {
 
 // Deliver a sequence of message all inorder.
 static void BM_receive_udp_raw_sequence_inorder(benchmark::State& state) {
-  using newb_t = dummy_newb<new_raw_msg>;
+  using message_t = new_raw_msg;
   using proto_t = udp_protocol<ordering<raw>>;
   no_clock_config cfg;
   actor_system sys{cfg};
   auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
-  actor n = make_newb<newb_t>(sys, *esock);
-  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
-  auto& ref = dynamic_cast<newb_t&>(*ptr);
   auto tptr = new dummy_ordering_transport;
-  ref.transport.reset(tptr);
-  ref.protocol.reset(new proto_t(&ref));
+  transport_ptr trans{tptr};
+  actor n = spawn_newb<proto_t, hidden>(sys, dummy_newb<message_t>,
+                                        std::move(trans), *esock);
+  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
+  //auto& ref = dynamic_cast<newb<message_t>&>(*ptr);
+  auto& ref = dynamic_cast<stateful_newb<message_t, dummy_state>&>(*ptr);
   // Prepare packets to receive.
   size_t packet_size = state.range(0);
   tptr->payload_len = packet_size;
@@ -444,7 +439,7 @@ static void BM_receive_udp_raw_sequence_inorder(benchmark::State& state) {
     whdl.buf->resize(start + packet_size);
     std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
   }
-  ref.transport->receive_buffer = ref.transport->send_buffer;
+  ref.trans->receive_buffer = ref.trans->send_buffer;
   // Add instructions.
   tptr->instructions.emplace_back(instruction::next);
   tptr->instructions.emplace_back(instruction::next);
@@ -459,9 +454,9 @@ static void BM_receive_udp_raw_sequence_inorder(benchmark::State& state) {
   tptr->instructions.emplace_back(instruction::next);
   auto msg_expected = [&] {
     //std::cerr << "expected" << std::endl;
-    ref.received = false;
+    ref.state.received = false;
     ref.read_event();
-    if (!ref.received) {
+    if (!ref.state.received) {
       std::cerr << "expected message did not arrive" << std::endl;
       std::abort();
     }
@@ -480,23 +475,24 @@ static void BM_receive_udp_raw_sequence_inorder(benchmark::State& state) {
     msg_expected();
     sys.clock().cancel_all();
   }
+  ref.stop();
 }
 
 BENCHMARK(BM_receive_udp_raw_sequence_inorder)->RangeMultiplier(2)->Range(1<<from, 1<<to);
 
 // Deliver a sequence of messages with one message missing.
 static void BM_receive_udp_raw_sequence_dropped(benchmark::State& state) {
-  using newb_t = dummy_newb<new_raw_msg>;
+  using message_t = new_raw_msg;
   using proto_t = udp_protocol<ordering<raw>>;
   no_clock_config cfg;
   actor_system sys{cfg};
   auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
-  actor n = make_newb<newb_t>(sys, *esock);
-  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
-  auto& ref = dynamic_cast<newb_t&>(*ptr);
   auto tptr = new dummy_ordering_transport;
-  ref.transport.reset(tptr);
-  ref.protocol.reset(new proto_t(&ref));
+  transport_ptr trans{tptr};
+  actor n = spawn_newb<proto_t, hidden>(sys, dummy_newb<message_t >,
+                                        std::move(trans), *esock);
+  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
+  auto& ref = dynamic_cast<stateful_newb<message_t, dummy_state>&>(*ptr);
   // Prepare packets to receive.
   size_t packet_size = state.range(0);
   tptr->payload_len = packet_size;
@@ -506,7 +502,7 @@ static void BM_receive_udp_raw_sequence_dropped(benchmark::State& state) {
     whdl.buf->resize(start + packet_size);
     std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
   }
-  ref.transport->receive_buffer = ref.transport->send_buffer;
+  ref.trans->receive_buffer = ref.trans->send_buffer;
   // Add instructions.
   tptr->instructions.emplace_back(instruction::next);
   tptr->instructions.emplace_back(instruction::skip);
@@ -520,17 +516,17 @@ static void BM_receive_udp_raw_sequence_dropped(benchmark::State& state) {
   tptr->instructions.emplace_back(instruction::next);
   tptr->instructions.emplace_back(instruction::next);
   auto msg_expected = [&] {
-    ref.received = false;
+    ref.state.received = false;
     ref.read_event();
-    if (!ref.received) {
+    if (!ref.state.received) {
       std::cerr << "expected message did not arrive" << std::endl;
       std::abort();
     }
   };
   auto msg_unexpected = [&] {
-    ref.received = false;
+    ref.state.received = false;
     ref.read_event();
-    if (ref.received) {
+    if (ref.state.received) {
       std::cerr << "message arrived unexpectedly" << std::endl;
       std::abort();
     }
@@ -548,23 +544,24 @@ static void BM_receive_udp_raw_sequence_dropped(benchmark::State& state) {
     msg_expected();
     sys.clock().cancel_all();
   }
+  ref.stop();
 }
 
 BENCHMARK(BM_receive_udp_raw_sequence_dropped)->RangeMultiplier(2)->Range(1<<from, 1<<to);
 
 // Deliver a sequence of messages with one delivered out of order.
 static void BM_receive_udp_raw_sequence_late(benchmark::State& state) {
-  using newb_t = dummy_newb<new_raw_msg>;
+  using message_t = new_raw_msg;
   using proto_t = udp_protocol<ordering<raw>>;
   no_clock_config cfg;
   actor_system sys{cfg};
   auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
-  actor n = make_newb<newb_t>(sys, *esock);
-  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
-  auto& ref = dynamic_cast<newb_t&>(*ptr);
   auto tptr = new dummy_ordering_transport;
-  ref.transport.reset(tptr);
-  ref.protocol.reset(new proto_t(&ref));
+  transport_ptr trans{tptr};
+  actor n = spawn_newb<proto_t, hidden>(sys, dummy_newb<message_t>,
+                                        std::move(trans), *esock);
+  auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
+  auto& ref = dynamic_cast<stateful_newb<message_t, dummy_state>&>(*ptr);
   // Prepare packets to receive.
   size_t packet_size = state.range(0);
   tptr->payload_len = packet_size;
@@ -574,7 +571,7 @@ static void BM_receive_udp_raw_sequence_late(benchmark::State& state) {
     whdl.buf->resize(start + packet_size);
     std::fill(whdl.buf->begin() + start, whdl.buf->end(), 'a');
   }
-  ref.transport->receive_buffer = ref.transport->send_buffer;
+  ref.trans->receive_buffer = ref.trans->send_buffer;
   // Add instructions.
   tptr->instructions.emplace_back(instruction::next);
   tptr->instructions.emplace_back(instruction::skip);
@@ -589,18 +586,18 @@ static void BM_receive_udp_raw_sequence_late(benchmark::State& state) {
   tptr->instructions.emplace_back(instruction::next);
   auto msg_expected = [&] {
     //std::cerr << "expected" << std::endl;
-    ref.received = false;
+    ref.state.received = false;
     ref.read_event();
-    if (!ref.received) {
+    if (!ref.state.received) {
       std::cerr << "expected message did not arrive" << std::endl;
       std::abort();
     }
   };
   auto msg_unexpected = [&] {
     //std::cerr << "unexpected" << std::endl;
-    ref.received = false;
+    ref.state.received = false;
     ref.read_event();
-    if (ref.received) {
+    if (ref.state.received) {
       std::cerr << "message arrive unexpectedly" << std::endl;
       std::abort();
     }
@@ -619,6 +616,7 @@ static void BM_receive_udp_raw_sequence_late(benchmark::State& state) {
     msg_expected();
     sys.clock().cancel_all();
   }
+  ref.stop();
 }
 
 BENCHMARK(BM_receive_udp_raw_sequence_late)->RangeMultiplier(2)->Range(1<<from, 1<<to);
