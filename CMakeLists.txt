@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 2.8.12)
 project(newb_measurements C CXX)
 
 set (CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -35,7 +35,7 @@ endif(CAF_ENABLE_ADDRESS_SANITIZER)
 
 # check if the user provided CXXFLAGS, set defaults otherwise
 if(NOT CMAKE_CXX_FLAGS)
-  set(CMAKE_CXX_FLAGS                   "-std=c++17 -Wextra -Wall -pedantic ${EXTRA_FLAGS}")
+  set(CMAKE_CXX_FLAGS                   "-std=c++11 -Wextra -Wall -pedantic ${EXTRA_FLAGS}")
 endif()
 if(NOT CMAKE_CXX_FLAGS_DEBUG)
   set(CMAKE_CXX_FLAGS_DEBUG             "-O0 -g")
@@ -68,8 +68,8 @@ if (CAF_FOUND)
   include_directories(${CAF_INCLUDE_DIRS})
 endif ()
 
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
+#set(THREADS_PREFER_PTHREAD_FLAG ON)
+#find_package(Threads REQUIRED)
 
 find_package(BENCHMARK REQUIRED)
 if (BENCHMARK_FOUND)
@@ -86,7 +86,7 @@ macro(add folder name)
                         ${CAF_LIBRARY_CORE}
                         ${BENCHMARK_LIBRARIES})
   add_dependencies(${name} newb_measurements)
-  target_link_libraries(${name} Threads::Threads)
+  #target_link_libraries(${name} Threads::Threads)
 endmacro()
 
 add(src one_raw_udp)
