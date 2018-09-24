@@ -34,6 +34,9 @@ struct state {
 
 behavior raw_server(stateful_newb<new_raw_msg, state>* self, actor responder) {
   self->state.responder = responder;
+  self->set_timeout_handler([&](timeout_msg&) {
+    // Drop timeouts.
+  });
   return {
     [=](new_raw_msg& msg) {
       uint32_t counter;
@@ -64,6 +67,9 @@ behavior raw_server(stateful_newb<new_raw_msg, state>* self, actor responder) {
 
 behavior raw_client(stateful_newb<new_raw_msg, state>* self) {
   std::cout << "client is running" << std::endl;
+  self->set_timeout_handler([&](timeout_msg&) {
+    // Drop timeouts.
+  });
   return {
     [=](start_atom, size_t messages, actor responder) {
       std::cout << "starting" << std::endl;
