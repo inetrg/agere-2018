@@ -119,20 +119,22 @@ public:
   std::string host = "127.0.0.1";
   uint16_t port = 12345;
   bool is_server = false;
+  bool is_ordered = false;
 
   config() {
     opt_group{custom_options_, "global"}
-    .add(messages, "messages,m", "set number of exchanged messages")
-    .add(host, "host,H", "set host")
-    .add(port, "port,P", "set port")
-    .add(is_server, "server,s", "set server");
+    .add(messages,   "messages,m", "set number of exchanged messages")
+    .add(host,       "host,H",     "set host")
+    .add(port,       "port,P",     "set port")
+    .add(is_ordered, "ordered,o",  "use ordered UDP")
+    .add(is_server,  "server,s",   "set server");
   }
 };
 
 void caf_main(actor_system& sys, const config& cfg) {
   using namespace std::chrono;
   using proto_t = udp_protocol<reliability<policy::raw>>;
-  //using proto_t = udp_protocol<reliability<ordering<policy::raw>>>;
+  using ordered_proto_t = udp_protocol<reliability<ordering<policy::raw>>>;
   const char* host = cfg.host.c_str();
   const uint16_t port = cfg.port;
   scoped_actor self{sys};
@@ -142,36 +144,67 @@ void caf_main(actor_system& sys, const config& cfg) {
   if (cfg.is_server) {
     std::cerr << "creating server" << std::endl;
     accept_ptr<policy::new_raw_msg> pol{new accept_udp<policy::new_raw_msg>};
-    auto eserver = make_server<proto_t>(sys, raw_server, std::move(pol), port,
-                                        nullptr, true, self);
-    if (!eserver) {
-      std::cerr << "failed to start server on port " << port << std::endl;
-      return;
+    if (cfg.is_ordered) {
+      auto eserver = make_server<ordered_proto_t>(sys, raw_server, std::move(pol),
+                                                  port, nullptr, true, self);
+      if (!eserver) {
+        std::cerr << "failed to start server on port " << port << std::endl;
+        return;
+      }
+      auto server = std::move(*eserver);
+      await_done("done");
+      std::cerr << "stopping server" << std::endl;
+      server->stop();
+    } else {
+      auto eserver = make_server<proto_t>(sys, raw_server, std::move(pol), port,
+                                          nullptr, true, self);
+      if (!eserver) {
+        std::cerr << "failed to start server on port " << port << std::endl;
+        return;
+      }
+      auto server = std::move(*eserver);
+      await_done("done");
+      std::cerr << "stopping server" << std::endl;
+      server->stop();
     }
-    auto server = std::move(*eserver);
-    await_done("done");
-    std::cerr << "stopping server" << std::endl;
-    server->stop();
-    await_done("done");
   } else {
     std::cerr << "creating client" << std::endl;
     transport_ptr pol{new udp_transport};
-    auto eclient = spawn_client<proto_t>(sys, raw_client, std::move(pol), host,
-                                         port);
-    if (!eclient) {
-      std::cerr << "failed to start client for " << host << ":" << port
+    if (cfg.is_ordered) {
+      auto eclient = spawn_client<ordered_proto_t>(sys, raw_client, std::move(pol),
+                                                   host, port);
+      if (!eclient) {
+        std::cerr << "failed to start client for " << host << ":" << port
+                  << std::endl;
+        return;
+      }
+      auto client = std::move(*eclient);
+      auto start = system_clock::now();
+      self->send(client, start_atom::value, size_t(cfg.messages),
+                 actor_cast<actor>(self));
+      await_done("done");
+      auto end = system_clock::now();
+      std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
                 << std::endl;
-      return;
+      //self->send(client, exit_reason::user_shutdown);
+    } else {
+      auto eclient = spawn_client<proto_t>(sys, raw_client, std::move(pol), host,
+                                           port);
+      if (!eclient) {
+        std::cerr << "failed to start client for " << host << ":" << port
+                  << std::endl;
+        return;
+      }
+      auto client = std::move(*eclient);
+      auto start = system_clock::now();
+      self->send(client, start_atom::value, size_t(cfg.messages),
+                 actor_cast<actor>(self));
+      await_done("done");
+      auto end = system_clock::now();
+      std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
+                << std::endl;
+      //self->send(client, exit_reason::user_shutdown);
     }
-    auto client = std::move(*eclient);
-    auto start = system_clock::now();
-    self->send(client, start_atom::value, size_t(cfg.messages),
-               actor_cast<actor>(self));
-    await_done("done");
-    auto end = system_clock::now();
-    std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
-              << std::endl;
-    //self->send(client, exit_reason::user_shutdown);
   }
   std::abort();
 }
