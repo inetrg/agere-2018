@@ -22,7 +22,7 @@ namespace {
 using ordering_atom = atom_constant<atom("ordering")>;
 
 constexpr auto from = 6;
-constexpr auto to = 6; //13;
+constexpr auto to = 13;
 
 // Receiving is currently datagram only.
 struct dummy_transport : public transport {
@@ -156,19 +156,12 @@ class config : public actor_system_config {
 public:
   config() {
     load<io::middleman>();
-    set("scheduler.max-threads", 1);
-  }
-};
-
-class no_clock_config : public actor_system_config {
-public:
-  no_clock_config() {
     set("scheduler.policy", atom("testing"));
+    set("scheduler.max-threads", 1);
     set("logger.inline-output", true);
     set("middleman.manual-multiplexing", true);
     set("middleman.attach-utility-actors", true);
     set("middleman.max-pending-messages", 5);
-    load<io::middleman>();
   }
 };
 
@@ -418,7 +411,7 @@ struct dummy_ordering_transport : public transport {
 static void BM_receive_udp_raw_sequence_inorder(benchmark::State& state) {
   using message_t = new_raw_msg;
   using proto_t = udp_protocol<ordering<raw>>;
-  no_clock_config cfg;
+  config cfg;
   actor_system sys{cfg};
   auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
   auto tptr = new dummy_ordering_transport;
@@ -482,7 +475,7 @@ BENCHMARK(BM_receive_udp_raw_sequence_inorder)->RangeMultiplier(2)->Range(1<<fro
 static void BM_receive_udp_raw_sequence_dropped(benchmark::State& state) {
   using message_t = new_raw_msg;
   using proto_t = udp_protocol<ordering<raw>>;
-  no_clock_config cfg;
+  config cfg;
   actor_system sys{cfg};
   auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
   auto tptr = new dummy_ordering_transport;
@@ -551,7 +544,7 @@ BENCHMARK(BM_receive_udp_raw_sequence_dropped)->RangeMultiplier(2)->Range(1<<fro
 static void BM_receive_udp_raw_sequence_late(benchmark::State& state) {
   using message_t = new_raw_msg;
   using proto_t = udp_protocol<ordering<raw>>;
-  no_clock_config cfg;
+  config cfg;
   actor_system sys{cfg};
   auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
   auto tptr = new dummy_ordering_transport;
