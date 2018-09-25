@@ -71,6 +71,8 @@ endif ()
 #set(THREADS_PREFER_PTHREAD_FLAG ON)
 #find_package(Threads REQUIRED)
 
+find_package(Threads)
+
 if(NOT BENCHMARK_ROOT_DIR)
   set(BENCHMARK_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/benchmark/")
 endif()
@@ -90,6 +92,7 @@ macro(add folder name)
                         ${BENCHMARK_LIBRARIES})
   add_dependencies(${name} newb_measurements)
   #target_link_libraries(${name} Threads::Threads)
+  target_link_libraries(${name} ${CMAKE_THREAD_LIBS_INIT})
 endmacro()
 
 add(src one_raw_udp)
