@@ -38,19 +38,22 @@ require(gridExtra)
 # dev.off()
 
 
-pprelordudp <- read.csv("evaluation/pingpong/reliable-ordered-udp-handmeasured.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
+# pprelordudp <- read.csv("evaluation/pingpong/reliable-ordered-udp-handmeasured.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
+pprelordudp <- read.csv("evaluation/pingpong/reliable_ordered_udp-0.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
 
 pprelordudp$avg <- rowMeans(pprelordudp[,2:11])
 pprelordudp$sdev <- apply(pprelordudp[,2:11], 1, sd)
 pprelordudp$proto <- 'Reliable Ordered UDP'
 
-ppreludp <- read.csv("evaluation/pingpong/reliable-udp-handmeasured.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
+# ppreludp <- read.csv("evaluation/pingpong/reliable-udp-handmeasured.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
+ppreludp <- read.csv("evaluation/pingpong/reliable_udp-0.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
 
 ppreludp$avg <- rowMeans(ppreludp[,2:11])
 ppreludp$sdev <- apply(ppreludp[,2:11], 1, sd)
 ppreludp$proto <- 'Reliable UDP'
 
-pptcp <- read.csv("evaluation/pingpong/tcp.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
+# pptcp <- read.csv("evaluation/pingpong/tcp.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
+pptcp <- read.csv("evaluation/pingpong/tcp-0.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
 
 pptcp$avg <- rowMeans(pptcp[,2:11])
 pptcp$sdev <- apply(pptcp[,2:11], 1, sd)
