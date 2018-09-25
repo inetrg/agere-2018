@@ -171,11 +171,11 @@ template <class Message, class Protocol>
 static void BM_send(benchmark::State& state) {
   config cfg;
   actor_system sys{cfg};
-  auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
   size_t packet_size = static_cast<size_t>(state.range(0));
   transport_ptr trans{new dummy_transport(packet_size)};
+  caf::io::network::native_socket sock(1337);
   auto n = spawn_newb<Protocol, hidden>(sys, dummy_newb<Message>,
-                                        std::move(trans), *esock);
+                                        std::move(trans), sock);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   auto& ref = dynamic_cast<newb<Message>&>(*ptr);
   for (auto _ : state) {
@@ -218,11 +218,11 @@ template <class Message, class Protocol>
 static void BM_receive_impl(benchmark::State& state, bool wseq, bool wsize) {
   config cfg;
   actor_system sys{cfg};
-  auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
+  caf::io::network::native_socket sock(1337);
   auto tptr = new dummy_transport(state.range(0));
   transport_ptr trans{tptr};
   auto n = spawn_newb<Protocol, hidden>(sys, dummy_newb<Message>,
-                                        std::move(trans), *esock);
+                                        std::move(trans), sock);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   auto& ref = dynamic_cast<stateful_newb<Message, dummy_state>&>(*ptr);
   tptr->write_seq = wseq;
@@ -413,11 +413,11 @@ static void BM_receive_udp_raw_sequence_inorder(benchmark::State& state) {
   using proto_t = udp_protocol<ordering<raw>>;
   config cfg;
   actor_system sys{cfg};
-  auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
   auto tptr = new dummy_ordering_transport;
+  caf::io::network::native_socket sock(1337);
   transport_ptr trans{tptr};
   actor n = spawn_newb<proto_t, hidden>(sys, dummy_newb<message_t>,
-                                        std::move(trans), *esock);
+                                        std::move(trans), sock);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   //auto& ref = dynamic_cast<newb<message_t>&>(*ptr);
   auto& ref = dynamic_cast<stateful_newb<message_t, dummy_state>&>(*ptr);
@@ -477,11 +477,11 @@ static void BM_receive_udp_raw_sequence_dropped(benchmark::State& state) {
   using proto_t = udp_protocol<ordering<raw>>;
   config cfg;
   actor_system sys{cfg};
-  auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
+  caf::io::network::native_socket sock(1337);
   auto tptr = new dummy_ordering_transport;
   transport_ptr trans{tptr};
   actor n = spawn_newb<proto_t, hidden>(sys, dummy_newb<message_t >,
-                                        std::move(trans), *esock);
+                                        std::move(trans), sock);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   auto& ref = dynamic_cast<stateful_newb<message_t, dummy_state>&>(*ptr);
   // Prepare packets to receive.
@@ -546,11 +546,11 @@ static void BM_receive_udp_raw_sequence_late(benchmark::State& state) {
   using proto_t = udp_protocol<ordering<raw>>;
   config cfg;
   actor_system sys{cfg};
-  auto esock = caf::io::network::new_tcp_acceptor_impl(0, nullptr, true);
+  caf::io::network::native_socket sock(1337);
   auto tptr = new dummy_ordering_transport;
   transport_ptr trans{tptr};
   actor n = spawn_newb<proto_t, hidden>(sys, dummy_newb<message_t>,
-                                        std::move(trans), *esock);
+                                        std::move(trans), sock);
   auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
   auto& ref = dynamic_cast<stateful_newb<message_t, dummy_state>&>(*ptr);
   // Prepare packets to receive.
