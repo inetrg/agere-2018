@@ -1,5 +1,7 @@
 Makefile
 build
+actor-framework
+benchmark
 
 ### Python ###
 __pycache__/
