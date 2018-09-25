@@ -2,6 +2,10 @@ Makefile
 build
 actor-framework
 benchmark
+evaluation/pingpong/udp*.err
+evaluation/pingpong/udp*.out
+evaluation/pingpong/tcp*.err
+evaluation/pingpong/tcp*.out
 
 ### Python ###
 __pycache__/
