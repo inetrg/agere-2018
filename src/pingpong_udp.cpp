@@ -22,9 +22,6 @@ using quit_atom = atom_constant<atom("quit")>;
 using responder_atom = atom_constant<atom("responder")>;
 using config_atom = atom_constant<atom("config")>;
 
-constexpr uint32_t shut = 0x73687574;
-constexpr uint32_t down = 0x646f776e;
-
 struct state {
   actor responder;
   caf::io::connection_handle other;
@@ -35,20 +32,25 @@ struct state {
 behavior raw_server(stateful_newb<new_raw_msg, state>* self, actor responder) {
   self->state.responder = responder;
   return {
+    [=](atom_value atm, uint32_t id) {
+      self->proto->timeout(atm, id);
+    },
     [=](new_raw_msg& msg) {
       uint32_t counter;
       binary_deserializer bd(self->system(), msg.payload, msg.payload_len);
       bd(counter);
-      if (msg.payload_len == 4) {
+      if (counter != self->state.received_messages) {
+        std::cerr << "dropping msg: " << counter
+                  << " (was expecting: " << self->state.received_messages << ")"
+                  << std::endl;
+        return;
+      }
+      {
         auto whdl = self->wr_buf(nullptr);
         binary_serializer bs(&self->backend(), *whdl.buf);
         bs(counter);
-      } else if (msg.payload_len == 8) {
-        uint32_t rest;
-        bd(rest);
-        if (counter == shut && rest == down)
-          self->send(self, quit_atom::value);
       }
+      self->state.received_messages += 1;
     },
     [=](io_error_msg& msg) {
       std::cerr << "server got io error: " << to_string(msg.op) << std::endl;
@@ -64,33 +66,41 @@ behavior raw_server(stateful_newb<new_raw_msg, state>* self, actor responder) {
 
 behavior raw_client(stateful_newb<new_raw_msg, state>* self) {
   return {
+    [=](atom_value atm, uint32_t id) {
+      self->proto->timeout(atm, id);
+    },
     [=](start_atom, size_t messages, actor responder) {
       auto& s = self->state;
       s.responder = responder;
       s.messages = messages;
       auto whdl = self->wr_buf(nullptr);
       binary_serializer bs(&self->backend(), *whdl.buf);
-      bs(uint32_t(1));
+      bs(uint32_t(0));
     },
     [=](new_raw_msg& msg) {
       auto& s = self->state;
       uint32_t counter;
       binary_deserializer bd(self->system(), msg.payload, msg.payload_len);
       bd(counter);
+      if (counter != s.received_messages) {
+        std::cerr << "dropping message: " << counter
+                  << " (was expecting: " << s.received_messages << ")"
+                  << std::endl;
+        return;
+      }
       s.received_messages += 1;
       if (s.received_messages % 100 == 0)
         std::cerr << "got " << s.received_messages << std::endl;
       if (s.received_messages >= s.messages) {
         std::cerr << "got all messages!" << std::endl;
-        auto whdl = self->wr_buf(nullptr);
-        binary_serializer bs(&self->backend(), *whdl.buf);
-        bs(shut);
-        bs(down);
-        self->send(self, quit_atom::value);
+        self->delayed_send(self, std::chrono::milliseconds(500),
+                           quit_atom::value);
+        self->send(self->state.responder, quit_atom::value);
       } else {
         auto whdl = self->wr_buf(nullptr);
         binary_serializer bs(&self->backend(), *whdl.buf);
-        bs(counter + 1);
+        counter += 1;
+        bs(counter);
       }
     },
     [=](io_error_msg& msg) {
@@ -195,6 +205,7 @@ void caf_main(actor_system& sys, const config& cfg) {
       auto end = system_clock::now();
       std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
                 << std::endl;
+      await_done("done");
       //self->send(client, exit_reason::user_shutdown);
     }
   }
