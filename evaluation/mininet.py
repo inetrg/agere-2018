@@ -20,7 +20,7 @@ from time import time
 from time import sleep
 
 class TwoHostsTopology(Topo):
-    "peer to peer topology"
+    "The peer to peer topology for our benchmark."
 
     def build(self):
         "Build two nodes with a direct link"
@@ -34,7 +34,9 @@ class TwoHostsTopology(Topo):
 
 topos = { 'p2p': ( lambda: TwoHostsTopology() ) }
 
-def set_interface_delay(host, action, interface, delay): #action: add/change/delete
+def set_interface_delay(host, action, interface, delay): #
+    "Helper fun for set loss on a specific interface, action can be: add/change/delete"
+
     # command = 'tc qdisc {} dev {} root handle 1: netem delay {}ms'.format(action, interface, delay)
     command = ''
     if (delay > 0):
@@ -47,45 +49,50 @@ def set_interface_delay(host, action, interface, delay): #action: add/change/del
     host.cmd(command)
 
 def set_interface_packet_lost(host, action, interface, packet_loss): #action: add/change/delete
+    "Helper fun to set loss on a sepcific interface."
+
     # command = 'tc qdisc {} dev {} parent 1:1 netem loss {}%'.format(action, interface, packet_loss)
     command = 'tc qdisc {} dev {} root netem loss {}%'.format(action, interface, packet_loss)
     print('{} -> "{}"').format(host.name, command)
     host.cmd(command)
 
 def set_loss(host, packet_loss):
+    "Set loss for eth0 on a given host."
     iface = '{}-eth0'.format(host.name)
     op = 'add' if packet_loss > 0 else 'del'
     set_interface_packet_lost(host, op, iface, packet_loss)
 
 def set_delay(host, delay):
+    "set delay for eth0 on a given host."
     iface = '{}-eth0'.format(host.name)
     op = 'add' if delay > 0 else 'del'
     set_interface_delay(host, op, iface, delay)
 
 def get_info(host):
+    "Print tc info."
     iface = '{}-eth0'.format(host.name)
     command = 'tc qdisc show  dev {}'.format(iface)
     print('{} -> "{}"'.format(host.name, command))
     host.cmdPrint(command)
 
 def set_min_rto(host, timeout):
-    " Change min_rto for a route on Linux, might require the 'ms' ...
+    "Change min_rto for a route on Linux, might require the 'ms' suffix."
     command = 'ip route change 10.0.0.0/8 dev {}-eth0 proto kernel scope link src {} rto_min {}'.format(host.name, host.IP(), timeout)
     print('{} -> "{}"'.format(host.name, command))
     host.cmdPrint(command)
 
 def main():
     parser = argparse.ArgumentParser(description='CAF newbs on Mininet.')
-    parser.add_argument('-l', '--loss',    help='', type=int, default=0)
-    parser.add_argument('-d', '--delay',   help='', type=int, default=0)
-    parser.add_argument('-r', '--runs',    help='', type=int, default=1)
-    parser.add_argument('-T', '--threads', help='', type=int, default=1)
-    parser.add_argument('-R', '--rto',     help='', type=int, default=40)
-    parser.add_argument('-o', '--ordered', help='', action='store_true')
+    parser.add_argument('-l', '--loss',    help='set packet loss in percent (0)', type=int, default=0)
+    parser.add_argument('-d', '--delay',   help='set link delay in ms       (0)', type=int, default=0)
+    parser.add_argument('-r', '--runs',    help='set number of runs         (1)', type=int, default=1)
+    parser.add_argument('-T', '--threads', help='set number of threads      (1)', type=int, default=1)
+    parser.add_argument('-R', '--rto',     help='set min rto for TCP       (40)', type=int, default=40)
+    parser.add_argument('-o', '--ordered', help='enable ordering for UDP       ', action='store_true')
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-t', '--tcp',  help='', action='store_true')
-    group.add_argument('-u', '--udp',  help='', action='store_true')
-    group.add_argument('-q', '--quic', help='', action='store_true')
+    group.add_argument('-t', '--tcp',  help='use TCP' , action='store_true')
+    group.add_argument('-u', '--udp',  help='use UDP' , action='store_true')
+    group.add_argument('-q', '--quic', help='use QUIC', action='store_true')
     args = vars(parser.parse_args())
     run = 0
     max_runs = args['runs']
