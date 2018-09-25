@@ -40,9 +40,9 @@ behavior raw_server(stateful_newb<new_raw_msg, state>* self, actor responder) {
       binary_deserializer bd(self->system(), msg.payload, msg.payload_len);
       bd(counter);
       if (counter != self->state.received_messages) {
-        std::cerr << "dropping msg: " << counter
-                  << " (was expecting: " << self->state.received_messages << ")"
-                  << std::endl;
+        //std::cerr << "dropping msg: " << counter
+        //          << " (was expecting: " << self->state.received_messages << ")"
+        //          << std::endl;
         return;
       }
       {
@@ -83,9 +83,9 @@ behavior raw_client(stateful_newb<new_raw_msg, state>* self) {
       binary_deserializer bd(self->system(), msg.payload, msg.payload_len);
       bd(counter);
       if (counter != s.received_messages) {
-        std::cerr << "dropping message: " << counter
-                  << " (was expecting: " << s.received_messages << ")"
-                  << std::endl;
+        //std::cerr << "dropping message: " << counter
+        //          << " (was expecting: " << s.received_messages << ")"
+        //          << std::endl;
         return;
       }
       s.received_messages += 1;
