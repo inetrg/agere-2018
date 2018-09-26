@@ -154,38 +154,6 @@ behavior raw_client(stateful_newb<new_raw_msg, state>* self) {
   };
 }
 
-/*
-template <class ProtocolPolicy>
-struct tcp_acceptor
-    : public io::network::newb_acceptor<typename ProtocolPolicy::message_type> {
-  using super = io::network::newb_acceptor<typename ProtocolPolicy::message_type>;
-
-  tcp_acceptor(default_multiplexer& dm, native_socket sockfd)
-      : super(dm, sockfd) {
-    // nop
-  }
-
-  expected<actor> create_newb(native_socket sockfd,
-                              io::network::transport_policy_ptr pol) override {
-    CAF_LOG_TRACE(CAF_ARG(sockfd));
-    auto n = io::network::spawn_newb<ProtocolPolicy>(this->backend().system(),
-                                                     raw_server, std::move(pol),
-                                                     sockfd);
-    auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
-    if (ptr == nullptr) {
-      std::cerr << "failed to spawn newb" << std::endl;
-      return sec::runtime_error;
-    }
-    auto& ref = dynamic_cast<stateful_newb<new_raw_msg, state>&>(*ptr);
-    ref.state.responder = responder;
-    ref.configure_read(io::receive_policy::exactly(sizeof(uint32_t)));
-    return n;
-  }
-
-  actor responder;
-};
-*/
-
 class config : public actor_system_config {
 public:
   uint16_t port = 12345;
@@ -233,6 +201,7 @@ void caf_main(actor_system& sys, const config& cfg) {
       await_done("done");
       std::cerr << "stopping server" << std::endl;
       server->stop();
+      std::this_thread::sleep_for(std::chrono::seconds(1));
     } else {
       std::cerr << "creating client" << std::endl;
       transport_ptr pol{new tcp_transport};

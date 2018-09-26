@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 2.8.12)
 project(newb_measurements C CXX)
 set (CMAKE_C_COMPILER clang)
 set (CMAKE_CXX_COMPILER clang++)
@@ -36,7 +36,11 @@ endif(CAF_ENABLE_ADDRESS_SANITIZER)
 
 # check if the user provided CXXFLAGS, set defaults otherwise
 if(NOT CMAKE_CXX_FLAGS)
+<<<<<<< HEAD
     set(CMAKE_CXX_FLAGS                   "-std=c++17 -Wextra -Wall -pedantic ${EXTRA_FLAGS}")
+=======
+  set(CMAKE_CXX_FLAGS                   "-std=c++11 -Wextra -Wall -pedantic ${EXTRA_FLAGS}")
+>>>>>>> c75e8b83f5da104c17ebd3c734c59758e9120c67
 endif()
 if(NOT CMAKE_CXX_FLAGS_DEBUG)
     set(CMAKE_CXX_FLAGS_DEBUG             "-O0 -g")
@@ -62,16 +66,25 @@ set(ALL_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${UPPER_BUILD_TYPE}}")
 message(STATUS "CXX_FLAGS: ${ALL_CXX_FLAGS}")
 
 if(NOT CAF_ROOT_DIR)
+<<<<<<< HEAD
     set(CAF_ROOT_DIR "~/Git/actor-framework/build/")
+=======
+  set(CAF_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/actor-framework/build/")
+>>>>>>> c75e8b83f5da104c17ebd3c734c59758e9120c67
 endif()
 find_package(CAF COMPONENTS core io REQUIRED)
 if (CAF_FOUND)
     include_directories(${CAF_INCLUDE_DIRS})
 endif ()
 
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
+#set(THREADS_PREFER_PTHREAD_FLAG ON)
+#find_package(Threads REQUIRED)
 
+find_package(Threads)
+
+if(NOT BENCHMARK_ROOT_DIR)
+  set(BENCHMARK_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/benchmark/")
+endif()
 find_package(BENCHMARK REQUIRED)
 if (BENCHMARK_FOUND)
     include_directories(${BENCHMARK_INCLUDE_DIRS})
@@ -105,14 +118,15 @@ include_directories(${INCLUDE_DIRS})
 add_custom_target(newb_measurements)
 
 macro(add folder name)
-    add_executable(${name} ${folder}/${name}.cpp ${ARGN})
-    target_link_libraries(${name}
-            ${CMAKE_DL_LIBS}
-            ${CAF_LIBRARY_IO}
-            ${CAF_LIBRARY_CORE}
-            ${BENCHMARK_LIBRARIES})
-    add_dependencies(${name} newb_measurements)
-    target_link_libraries(${name} Threads::Threads)
+  add_executable(${name} ${folder}/${name}.cpp ${ARGN})
+  target_link_libraries(${name}
+                        ${CMAKE_DL_LIBS}
+                        ${CAF_LIBRARY_IO}
+                        ${CAF_LIBRARY_CORE}
+                        ${BENCHMARK_LIBRARIES})
+  add_dependencies(${name} newb_measurements)
+  #target_link_libraries(${name} Threads::Threads)
+  target_link_libraries(${name} ${CMAKE_THREAD_LIBS_INIT})
 endmacro()
 
 add(src one_raw_udp)
@@ -120,7 +134,7 @@ add(src one_raw_tcp)
 add(src one_basp_udp)
 add(src one_basp_tcp)
 add(src layers)
-add(src pingpong)
+add(src pingpong_udp)
 add(src pingpong_tcp)
 add(src pp_tcp_pure)
 

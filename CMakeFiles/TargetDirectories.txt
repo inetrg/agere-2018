@@ -1,0 +1,2 @@
+/home/boss/CLionProjects/measuring-newbs/CMakeFiles/rebuild_cache.dir
+/home/boss/CLionProjects/measuring-newbs/CMakeFiles/edit_cache.dir

@@ -2,13 +2,17 @@
 
 Some measurement related to a new broker concept for CAF. Based on the [CAF](https://github.com/actor-framework/actor-framework/) branch related to [new broker experiments](https://github.com/actor-framework/actor-framework/tree/topic/new-broker-experiments).
 
+
 ## Requirements
 
-* CAF (commit: 8d177d9)
+* [CAF](https://github.com/actor-framework/actor-framework) (with the `caf-poll.diff` patch applied)
 * [Google Benchmark](https://github.com/google/benchmark)
 * Cmake
-* C++ compiler
+* C++ 11 compiler
 * [Mininet](http://mininet.org)
+
+We used the VM available on the [mininet website](http://mininet.org/download/) to run the benchmarks. CAF and google benchmark can be be build with the script `setup.sh` in the repository
+
 
 ## Layers Benchmark
 
@@ -18,31 +22,42 @@ To run the benchmarks related the layering test run the following command. The r
 $ ./build/bin/layers --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out_format=csv --benchmark_out=evaluation/layers.csv
 ```
 
+
 ## Ping Pong Benchmark
 
-This benchmark requires setting up a virtual network with Mininet. The mininet.py file includes a simple peer to peer topology. First, start mininet:
+There is a python script to run the mininet benchmarks, `evaluation/mininet.py`. It has several options to determine which benchmarks to run:
 
 ```
-`$ mn --custom=mininet-py --topo=p2p -x
+$ ./evaluation/mininet.py -h
+usage: mininet.py [-h] [-l LOSS] [-d DELAY] [-r RUNS] [-T THREADS] [-R RTO]
+                  [-o] (-t | -u | -q)
+
+CAF newbs on Mininet.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -l LOSS, --loss LOSS  set packet loss in percent (0)
+  -d DELAY, --delay DELAY
+                        set link delay in ms (0)
+  -r RUNS, --runs RUNS  set number of runs (1)
+  -T THREADS, --threads THREADS
+                        set number of threads (1)
+  -R RTO, --rto RTO     set min rto for TCP (40)
+  -o, --ordered         enable ordering for UDP
+  -t, --tcp             use TCP
+  -u, --udp             use UDP
+  -q, --quic            use QUIC
 ```
 
-Then configure the loss on the links on each host. To change the loss to new value you have to delete the previous configuration first. Use the same command, with `del` instead of `add`.
+A batch of results could be created as follows:
 
 ```
-$ # h1
-$ sudo tc qdisc add dev h1-eth0 root netem loss 10%
-$ # h2
-$ sudo tc qdisc add dev h2-eth0 root netem loss 10%
+$ for i in {0..10}; sudo ./mininet.py -t -l $i -r 10    ; done # TCP
+$ for i in {0..10}; sudo ./mininet.py -u -l $i -r 10    ; done # reliable UDP
+$ for i in {0..10}; sudo ./mininet.py -u -l $i -r 10 -o ; done # reliable UDP + ordering
 ```
 
-Finally, run the server on one host and the client on the other:
+The script stores benchmark output in `./pingpong/` using the nameing scheme `$PROTOCOL-{client,server}-$LOSS-$DELAY-$RUN.{out,err}`. Results will be stored in the `.out` file of the client. Aggregateing the results into `.csv` files is done by the `evaluation/pingpong/merge_logs.sh`. It creates a number of csv files that should contain one colums for the loss percentage and 10 columns for measurements from 0% loss to 10% loss. It expects the requires files, i.e., the `.out` logs for loss 0% to 10%, in its folder.
 
-```
-$ # h1
-$ ../build/bin/pingpong -s
-$ #2 
-$ ../build/bin/pingpong -m 2000 -H \"10.0.0.1\"
-```
-
-The script `pingpong.R` plots the data and expectes it to be in a csv file containing a row with headers, for example `loss, value0, value1, ...value9` followed by rows of measurements, each having the loss in the first column and time values in ms (without the uint suffix) in the following columns.1
+Plots in tikz format can be created with the script `pingpong.R` using the previously created csv data.
 
