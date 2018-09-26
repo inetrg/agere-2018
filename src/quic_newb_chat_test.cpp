@@ -3,7 +3,7 @@
 #include "caf/binary_deserializer.hpp"
 #include "caf/binary_serializer.hpp"
 #include "caf/detail/call_cfun.hpp"
-#include "caf/io/network/newb.hpp"
+#include "caf/io/newb.hpp"
 #include "caf/logger.hpp"
 #include "caf/policy/newb_raw.hpp"
 #include "../caf/policy/newb_quic.hpp"
@@ -12,8 +12,6 @@ using namespace caf;
 
 using caf::io::network::default_multiplexer;
 using caf::io::network::invalid_native_socket;
-using caf::io::network::make_client_newb;
-using caf::io::network::make_server_newb;
 using caf::io::network::native_socket;
 using caf::policy::accept_quic;
 using caf::policy::quic_protocol;
@@ -27,8 +25,8 @@ using quit_atom = atom_constant<atom("quit")>;
 using responder_atom = atom_constant<atom("responder")>;
 
 constexpr size_t chunk_size = 8192; //128; //8192; //1024;
-
-struct raw_newb : public io::network::newb<policy::new_raw_msg> {
+/*
+struct raw_newb : public io::newb<policy::new_raw_msg> {
   using message_type = policy::new_raw_msg;
 
   raw_newb(caf::actor_config& cfg, default_multiplexer& dm,
@@ -122,7 +120,7 @@ struct quic_acceptor
   }
 
   actor responder;
-};
+};*/
 
 class config : public actor_system_config {
 public:
@@ -143,7 +141,7 @@ struct state {
 };
 
 void caf_main(actor_system& sys, const config& cfg) {
-  using acceptor_t = quic_acceptor<quic_protocol<policy::raw>>;
+      /*using acceptor_t = quic_acceptor<quic_protocol<policy::raw>>;
   const char* host = cfg.host.c_str();
   const uint16_t port = cfg.port;
   scoped_actor self{sys};
@@ -207,7 +205,7 @@ void caf_main(actor_system& sys, const config& cfg) {
     //await_done();
   } else {
     std::cout << "creating new client" << std::endl;
-    auto client = make_client_newb<raw_newb, quic_transport,
+    auto client = make client<raw_newb, quic_transport,
             quic_protocol<policy::raw>>(sys, host, port);
     self->send(client, responder_atom::value, helper);
 
@@ -219,6 +217,7 @@ void caf_main(actor_system& sys, const config& cfg) {
     self->send(client, quit_atom::value);
     await_done();
   }
+  */
 }
 
 } // namespace anonymous

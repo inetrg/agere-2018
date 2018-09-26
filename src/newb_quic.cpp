@@ -18,7 +18,7 @@
 
 #include "../caf/policy/newb_quic.hpp"
 #include "caf/config.hpp"
-#include "mozquic_helper.h"
+#include "mozquic_helper.hpp"
 
 #ifdef CAF_WINDOWS
 # ifndef WIN32_LEAN_AND_MEAN
@@ -77,7 +77,7 @@ quic_transport::quic_transport(mozquic_connection_t* conn)
 }
 
 io::network::rw_state quic_transport::read_some
-(io::network::newb_base*) {
+(io::newb_base*) {
   CAF_LOG_TRACE("");
   int i = 0;
   while (++i < 20) {
@@ -100,7 +100,7 @@ bool quic_transport::should_deliver() {
   return collected >= read_threshold;
 }
 
-void quic_transport::prepare_next_read(io::network::newb_base*) {
+void quic_transport::prepare_next_read(io::newb_base*) {
   collected = 0;
   received_bytes = 0;
   switch (rd_flag) {
@@ -130,7 +130,7 @@ void quic_transport::configure_read(io::receive_policy::config config) {
   maximum = config.second;
 }
 
-io::network::rw_state quic_transport::write_some(io::network::newb_base*
+io::network::rw_state quic_transport::write_some(io::newb_base*
 parent) {
   CAF_LOG_TRACE("");
   mozquic_stream_t* stream;
@@ -152,24 +152,22 @@ parent) {
   return io::network::rw_state::success;
 }
 
-void quic_transport::prepare_next_write(io::network::newb_base* parent) {
+void quic_transport::prepare_next_write(io::newb_base* parent) {
   written = 0;
   send_buffer.clear();
   if (offline_buffer.empty()) {
-    parent->backend().del(io::network::operation::write,
-                          parent->fd(), parent);
+    parent->stop_writing();
     writing = false;
   } else {
     send_buffer.swap(offline_buffer);
   }
 }
 
-void quic_transport::flush(io::network::newb_base* parent) {
+void quic_transport::flush(io::newb_base* parent) {
   CAF_ASSERT(parent != nullptr);
   CAF_LOG_TRACE(CAF_ARG(offline_buffer.size()));
   if (!offline_buffer.empty() && !writing) {
-    parent->backend().add(io::network::operation::write,
-                          parent->fd(), parent);
+    parent->start_writing();
     writing = true;
     prepare_next_write(parent);
   }
@@ -323,7 +321,7 @@ accept_quic::create_socket(uint16_t port, const char*, bool) {
   return mozquic_osfd(connection);
 }
 
-void accept_quic::read_event(caf::io::network::newb_base*) {
+void accept_quic::read_event(caf::io::newb_base*) {
   using namespace io::network;
   int i = 0;
   do {
@@ -333,7 +331,7 @@ void accept_quic::read_event(caf::io::network::newb_base*) {
 
   if(closure.new_connection) {
     int fd = mozquic_osfd(closure.new_connection);
-    transport_policy_ptr transport{new quic_transport{closure.new_connection}};
+    transport_ptr transport{new quic_transport{closure.new_connection}};
     auto en = create_newb(fd, std::move(transport));
     if (!en) {
       return;
@@ -347,8 +345,8 @@ void accept_quic::read_event(caf::io::network::newb_base*) {
   }
 }
 
-std::pair<io::network::native_socket, io::network::transport_policy_ptr>
-accept_quic::accept(io::network::newb_base*) {
+std::pair<io::network::native_socket, transport_ptr>
+accept_quic::accept_event(io::newb_base *) {
   using namespace io::network;
   int i = 0;
   do {
@@ -357,7 +355,7 @@ accept_quic::accept(io::network::newb_base*) {
   } while(++i < 20);
 
   if(closure.new_connection) {
-    std::pair<native_socket, transport_policy_ptr> ret(
+    std::pair<native_socket, transport_ptr> ret(
             mozquic_osfd(closure.new_connection),
             new quic_transport{closure.new_connection}
             );
@@ -368,7 +366,7 @@ accept_quic::accept(io::network::newb_base*) {
   return {0, nullptr};
 }
 
-void accept_quic::init(io::network::newb_base& n) {
+void accept_quic::init(io::newb_base& n) {
   n.start();
 }
 

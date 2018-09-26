@@ -68,6 +68,33 @@ if (CAF_FOUND)
   include_directories(${CAF_INCLUDE_DIRS})
 endif ()
 
+if (NOT MOZQUIC_ROOT_DIR)
+  set(MOZQUIC_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../mozquic/)
+endif ()
+  find_package(Mozquic)
+if (MOZQUIC_FOUND)
+  include_directories(${MOZQUC_INCLUDE_DIRS})
+else ()
+  message(FATAL_ERROR "Could not find Mozquic!")
+endif ()
+#### NSS ####
+find_package(NSS)
+if (NSS_FOUND)
+  include_directories(${NSS_INCLUDE_DIRS})
+  message(STATUS "NSS_INCLUDE_DIRS: ${NSS_INCLUDE_DIRS}")
+else ()
+  message(FATAL_ERROR "Could not find NSS.")
+endif ()
+
+#### NSPR ####
+find_package(NSPR)
+if(NSPR_FOUND)
+  include_directories(${NSPR_INCLUDE_DIRS})
+  message(STATUS "NSPR_INCLUDE_DIRS: ${NSPR_INCLUDE_DIRS}")
+else()
+  message(FATAL_ERROR "could not find NSPR.")
+endif()
+
 #set(THREADS_PREFER_PTHREAD_FLAG ON)
 #find_package(Threads REQUIRED)
 
@@ -91,7 +118,6 @@ macro(add folder name)
                         ${CAF_LIBRARY_CORE}
                         ${BENCHMARK_LIBRARIES})
   add_dependencies(${name} newb_measurements)
-  #target_link_libraries(${name} Threads::Threads)
   target_link_libraries(${name} ${CMAKE_THREAD_LIBS_INIT})
 endmacro()
 
@@ -103,3 +129,20 @@ add(src layers)
 add(src pingpong_udp)
 add(src pingpong_tcp)
 add(src pp_tcp_pure)
+
+add_executable(quic_chat_test
+        src/quic_newb_chat_test.cpp
+        src/newb_quic.cpp
+        caf/policy/newb_quic.hpp
+        src/mozquic_helper.hpp
+        )
+target_link_libraries(
+        quic_chat_test
+        ${CMAKE_DL_LIBS}
+        ${CAF_LIBRARY_IO}
+        ${CAF_LIBRARY_CORE}
+        ${BENCHMARK_LIBRARIES}
+        ${NSS_LIBRARIES}
+        ${NSPR_LIBRARIES}
+        ${MOZQUIC_LIBRARIES})
+add_dependencies(quic_chat_test newb_measurements)

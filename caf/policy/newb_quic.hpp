@@ -18,32 +18,33 @@
 
 #pragma once
 
-#include "caf/io/newb.hpp"
+#include "caf/io/network/default_multiplexer.hpp"
 #include "caf/io/network/native_socket.hpp"
+#include "caf/policy/accept.hpp"
+#include "caf/policy/transport.hpp"
 #include "MozQuic.h"
 
 namespace caf {
 namespace policy {
 
 struct client_closure {
-  client_closure(io::network::byte_buffer& wr_buf, io::network::byte_buffer& rec_buf) :
+  client_closure(byte_buffer& wr_buf, byte_buffer& rec_buf) :
     write_buffer(wr_buf),
     receive_buffer(rec_buf) {
-
   };
 
   bool is_server = false;
   bool connected = false;
   int amount_read = 0;
-  io::network::byte_buffer& write_buffer;
-  io::network::byte_buffer& receive_buffer;
+  byte_buffer& write_buffer;
+  byte_buffer& receive_buffer;
 };
 
 struct server_closure {
     mozquic_connection_t* new_connection = nullptr;
 };
 
-struct quic_transport : public io::network::transport_policy {
+struct quic_transport : public transport {
   quic_transport(mozquic_connection_t* conn = nullptr);
 
   ~quic_transport() override {
@@ -53,19 +54,19 @@ struct quic_transport : public io::network::transport_policy {
     }
   }
 
-  io::network::rw_state read_some(io::network::newb_base* parent) override;
+  io::network::rw_state read_some(io::newb_base* parent) override;
 
   bool should_deliver() override;
 
-  void prepare_next_read(io::network::newb_base*) override;
+  void prepare_next_read(io::newb_base*) override;
 
   void configure_read(io::receive_policy::config config) override;
 
-  io::network::rw_state write_some(io::network::newb_base* parent) override;
+  io::network::rw_state write_some(io::newb_base* parent) override;
 
-  void prepare_next_write(io::network::newb_base* parent) override;
+  void prepare_next_write(io::newb_base* parent) override;
 
-  void flush(io::network::newb_base* parent) override;
+  void flush(io::newb_base* parent) override;
 
   expected<io::network::native_socket>
   connect(const std::string& host, uint16_t port,
@@ -87,10 +88,11 @@ struct quic_transport : public io::network::transport_policy {
 };
 
 // only server uses acceptors
-struct accept_quic : public io::network::accept_policy {
-  accept_quic() :
-    io::network::accept_policy(false) // true if reading is handled manually
-    {};
+template <class Message>
+struct accept_quic : public accept<Message> {
+  accept_quic() : accept<Message>(true) {
+    connection = nullptr;
+  };
 
   ~accept_quic() override {
     // destroy all pending connections
@@ -103,18 +105,18 @@ struct accept_quic : public io::network::accept_policy {
   expected<io::network::native_socket>
   create_socket(uint16_t port, const char* host, bool reuse = false) override;
 
-  std::pair<io::network::native_socket, io::network::transport_policy_ptr>
-    accept(io::network::newb_base* parent) override;
+  std::pair<io::network::native_socket, transport_ptr>
+    accept_event(io::newb_base *parent) override;
 
   /// If `manual_read` is set to true, the acceptor will only call
   /// this function for new read event and let the policy handle everything
   /// else.
-  void read_event(io::network::newb_base*) override;
+  void read_event(io::newb_base*) override;
 
-  void init(io::network::newb_base& n) override;
-
-  expected<actor> create_newb(native_socket sockfd,
-                              io::network::transport_policy_ptr pol) override {
+  void init(io::newb_base& n) override;
+/*
+  expected<actor> create_newb(io::network::native_socket sockfd,
+                              transport_ptr pol) override {
     CAF_LOG_TRACE(CAF_ARG(sockfd));
     auto n = io::network::make_newb<raw_newb>(this->backend().system(), sockfd);
     auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
@@ -130,7 +132,7 @@ struct accept_quic : public io::network::accept_policy {
     // TODO: Just a workaround.
     anon_send(responder, n);
     return n;
-  }
+  }*/
 
   // connection state
   mozquic_connection_t* connection;
@@ -139,9 +141,9 @@ struct accept_quic : public io::network::accept_policy {
 
 template <class T>
 struct quic_protocol
-      : public io::network::protocol_policy<typename T::message_type> {
+      : public protocol<typename T::message_type> {
   T impl;
-  quic_protocol(io::network::newb<typename T::message_type>* parent)
+  quic_protocol(io::newb<typename T::message_type>* parent)
           : impl(parent) {
     // nop
   }
@@ -154,12 +156,12 @@ struct quic_protocol
     return impl.timeout(atm, id);
   }
 
-  void write_header(io::network::byte_buffer& buf,
-                    io::network::header_writer* hw) override {
+  void write_header(byte_buffer& buf,
+                    header_writer* hw) override {
     impl.write_header(buf, hw);
   }
 
-  void prepare_for_sending(io::network::byte_buffer& buf, size_t hstart,
+  void prepare_for_sending(byte_buffer& buf, size_t hstart,
                            size_t offset, size_t plen) override {
     impl.prepare_for_sending(buf, hstart, offset, plen);
   }

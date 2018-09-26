@@ -130,7 +130,7 @@ void caf_main(actor_system& sys, const config& cfg) {
       accept_fd = accept(socket_fd, (struct sockaddr*) &isa, &addr_size);
       tcp_nodelay(accept_fd, true);
       if (accept_fd < 0) {
-        std::cerr << "accept failed" << std::endl;
+        std::cerr << "accept_event failed" << std::endl;
         close(socket_fd);
         exit(2);
       }
