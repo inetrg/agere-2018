@@ -76,7 +76,7 @@ pp_plot <- ggplot(ppdf, aes(x=loss, y=avg/1000, color=proto)) +
            ) +
            scale_shape_manual(values=c(1, 4, 3)) +
            scale_x_continuous(breaks=seq(0, 10, 1)) + # expand=c(0, 0), limits=c(0, 10)
-           scale_y_continuous(limits=c(0, 112), breaks=seq(0, 110, 10)) + # expand=c(0, 0), limits=c(0, 10)
+           scale_y_continuous(limits=c(0, 40), breaks=seq(0, 110, 10)) + # expand=c(0, 0), limits=c(0, 10)
            theme_bw() +
            theme(
              legend.title=element_blank(),
