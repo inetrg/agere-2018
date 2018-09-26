@@ -141,7 +141,7 @@ struct raw_newb : public io::network::newb<policy::new_raw_msg> {
   uint32_t interval_counter;
   uint32_t received_messages;
   std::chrono::microseconds interval;
-  // values: measurement point, current interval, messages sent in interval, offline receive_buffer size
+  // values: measurement point, current interval, messages sent in interval, offline buffer size
   std::vector<std::tuple<std::chrono::microseconds, size_t, size_t>> data;
 };
 

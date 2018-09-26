@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "caf/io/network/newb.hpp"
+#include "caf/io/newb.hpp"
 #include "caf/io/network/native_socket.hpp"
 #include "MozQuic.h"
 
