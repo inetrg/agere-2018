@@ -3,7 +3,9 @@ library(ggplot2)
 require(RColorBrewer)
 require(gridExtra)
 
+# Read benchmark results.
 df <- read.csv("evaluation/layers.csv", sep=",", skip=8)
+
 # Clean empty columns.
 emptycols <- sapply(df, function (k) all(is.na(k)))
 df <- df[!emptycols]
@@ -11,7 +13,7 @@ df <- df[!emptycols]
 # Separate test input size from name.
 df$tmp_name <- data.frame(do.call('rbind', strsplit(as.character(df$name), '/', fixed=TRUE)))
 
-# sepearate type from size
+#Ssepearate type from size.
 df$tmp_size <- data.frame(do.call('rbind', strsplit(as.character(df$tmp_name$X2), '_', fixed=TRUE)))
 
 # Add a tag to differentiatae between udp and tcp tests.
@@ -19,11 +21,11 @@ df$benchmark <- df$tmp_name$X1
 df$size <- df$tmp_size$X1
 df$type <- df$tmp_size$X2
 
-# drop weird ones
+# Drop weird ones.
 keeps <- c("benchmark", "size", "type", "real_time")
 df <- df[keeps]
 
-#  extract values
+# Extract values.
 all_stddev <- split(df,df$type)[['stddev']]
 all_median <- split(df,df$type)[['median']]
 df <- split(df,df$type)[['mean']]
@@ -36,11 +38,13 @@ df$proto <- data.frame(ifelse(grepl("tcp", df$benchmark), "tcp", "udp"))
 df$benchmark <- as.character(df$benchmark)
 df$size <- as.numeric(as.character(df$size))
 
-# drop everything > 16384
+# Drop everything > 16384.
 df <- df[! (df$size == 16384), ]
 
 df$upper <- df$real_time + df$stddev
 df$lower <- df$real_time - df$stddev
+
+
 
 # Get UDP related data.
 udp <- split(df,df$proto)[['udp']]
@@ -78,11 +82,14 @@ udp_send_plot <- ggplot(udp_send, aes(x=size, y=real_time / 1000, color=benchmar
                  ) +
                  scale_color_brewer(type="qual", palette=6) +
                  labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
-#ggsave("figs/udp_send.pdf", plot=udp_send_plot, width=3.4, height=2.3)
-### tikz export
+
+# Create graphs.
 tikz(file="figs/udp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
 udp_send_plot
 dev.off()
+ggsave("figs/udp_send.pdf", plot=udp_send_plot, width=3.4, height=2.3)
+
+
 
 # Get UDP receive tests.
 udp_receive <- split(udp,udp$operation)[['receive']]
@@ -127,11 +134,14 @@ udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=size, y=real_time / 
                            ) +
                            scale_color_brewer(type="qual", palette=6) +
                            labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
-#ggsave("figs/udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height=2.3)
-### tikz export
+
+# Create graphs.
 tikz(file="figs/udp_receive_single.tikz", sanitize=TRUE, width=3.4, height=2.3)
 udp_receive_single_plot
 dev.off()
+ggsave("figs/udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height=2.3)
+
+
 
 # Process sequence results.
 udp_receive_sequence <- split(udp_receive,udp_receive$sequence)[['yes']]
@@ -167,11 +177,13 @@ udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=size, y=real_tim
                              scale_color_brewer(type="qual", palette=6) +
                              labs(x="Payload Size [bytes]", y="Sequence Handling Time [us]")
 
-#ggsave("figs/udp_receive_sequence.pdf", plot=udp_receive_sequence_plot, width=3.4, height=2.3)
-### tikz export
+# Create graphs.
 tikz(file="figs/udp_receive_sequence.tikz", sanitize=TRUE, width=3.4, height=2.3)
 udp_receive_sequence_plot
 dev.off()
+ggsave("figs/udp_receive_sequence.pdf", plot=udp_receive_sequence_plot, width=3.4, height=2.3)
+
+
 
 # Get tcp related data.
 tcp <- split(df,df$proto)[['tcp']]
@@ -213,17 +225,13 @@ tcp_send_plot <- ggplot(tcp_send, aes(x=size, y=real_time/1000, color=benchmark)
                  #scale_colour_manual(values=brewer.pal(n=4, name="Dark2")[-c(2,3)]) + # choose colors to match the other plots
                  labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 
-# colors <- brewer.pal(n=7, "Oranges")[3:9]
-#basp <- split(tcp,tcp$benchmark)[['BASP']]
-#raw <- split(tcp,tcp$benchmark)[['Raw']]
-#diffs <- basp$real_time - raw$real_time
-
-### pdf export
-#ggsave("figs/tcp_send.pdf", plot=tcp_plot, width=3.4, height=2.3)
-### tikz export
+# Create graphs.
 tikz(file="figs/tcp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
 tcp_send_plot
 dev.off()
+ggsave("figs/tcp_send.pdf", plot=tcp_send_plot, width=3.4, height=2.3)
+
+
 
 tcp_receive$benchmark <- gsub("BM_receive_tcp_raw",  "Raw",  tcp_receive$benchmark)
 tcp_receive$benchmark <- gsub("BM_receive_tcp_basp", "BASP", tcp_receive$benchmark)
@@ -258,14 +266,13 @@ tcp_receive_plot <- ggplot(tcp_receive, aes(x=size, y=real_time/1000, color=benc
                     #scale_colour_manual(values=brewer.pal(n=4, name="Set1")[-c(2,3)]) + # choose colors to match the other plots
                     labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 
+# Create graphs.
 tikz(file="figs/tcp_receive.tikz", sanitize=TRUE, width=3.4, height=2.3)
 tcp_receive_plot
 dev.off()
+ggsave("figs/tcp_receive.pdf", plot=tcp_receive_plot, width=3.4, height=2.3)
 
 
-#tikz(file="figs/send_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
-#grid.arrange(tcp_send_plot, udp_send_plot, ncol=2)
-#dev.off()
 
 # Create a plot that combines sending data.
 tcp_send_cleaned <- tcp_send[c("benchmark", "size", "real_time", "upper", "lower")]
@@ -308,9 +315,12 @@ combined_send_plot <- ggplot(send_combined, aes(x=size, y=real_time/1000, color=
                       #scale_color_grey() +
                       labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 
+# Create graphs.
 tikz(file="figs/send_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
 combined_send_plot
 dev.off()
+ggsave("figs/send_combined.pdf", plot=combined_send_plot, width=3.4, height=2.3)
+
 
 
 # Create a plot that combines receiving data.
@@ -354,9 +364,8 @@ combined_receive_plot <- ggplot(receive_combined, aes(x=size, y=real_time/1000, 
                          scale_color_brewer(type="qual", palette=6) +
                          labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 
-# ggsave("receive_combined.pdf", plot=combined_receive_plot, width=3.4, height=2.3)
-
+# Create graphs.
 tikz(file="figs/receive_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
 combined_receive_plot
 dev.off()
-
+ggsave("figs/receive_combined.pdf", plot=combined_receive_plot, width=3.4, height=2.3)

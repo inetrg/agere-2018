@@ -60,7 +60,6 @@ pp_plot <- ggplot(ppdf, aes(x=loss, y=avg/1000, color=proto)) +
 tikz(file="figs/pingpong-0.tikz", sanitize=TRUE, width=3.4, height=2.3)
 pp_plot
 dev.off()
-
 ggsave("figs/pingpong-0.pdf", plot=pp_plot, width=3.4, height=2.3)
 
 
