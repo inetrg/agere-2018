@@ -6,6 +6,8 @@ evaluation/pingpong/udp*.err
 evaluation/pingpong/udp*.out
 evaluation/pingpong/tcp*.err
 evaluation/pingpong/tcp*.out
+figs/*.tikz
+figs/*.pdf
 
 ### Python ###
 __pycache__/
