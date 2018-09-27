@@ -38,15 +38,16 @@ def set_interface_delay(host, action, interface, delay): #
     "Helper fun for set loss on a specific interface, action can be: add/change/delete"
 
     # command = 'tc qdisc {} dev {} root handle 1: netem delay {}ms'.format(action, interface, delay)
-    command = ''
-    if (delay > 0):
-        variance = delay / 10
-        distribution = 'normal'
-        command = 'tc qdisc {} dev {} root netem delay {}ms {}ms distribution {}'.format(action, interface, delay, variance, distribution)
-    else:
-        command = 'tc qdisc {} dev {} root netem delay {}ms'.format(action, interface, delay)
+    command = 'tc qdisc {} dev {} root netem delay {}ms'.format(action, interface, delay)
+    #command = ''
+    #if (delay > 0):
+    #    variance = delay / 10
+    #    distribution = 'normal'
+    #    command = 'tc qdisc {} dev {} root netem delay {}ms {}ms distribution {}'.format(action, interface, delay, variance, distribution)
+    #else:
+    #    command = 'tc qdisc {} dev {} root netem delay {}ms'.format(action, interface, delay)
     print('{} -> "{}"'.format(host.name, command))
-    host.cmd(command)
+    host.cmdPrint(command)
 
 def set_interface_packet_lost(host, action, interface, packet_loss): #action: add/change/delete
     "Helper fun to set loss on a sepcific interface."
@@ -68,10 +69,25 @@ def set_delay(host, delay):
     op = 'add' if delay > 0 else 'del'
     set_interface_delay(host, op, iface, delay)
 
+def conf_host(host, delay, loss):
+    iface = '{}-eth0'.format(host.name)
+    if delay == 0 or loss == 0:
+        command = 'tc qdisc del dev {} root netem'.format(iface)
+        print('{} -> "{}"'.format(host.name, command))
+    command = 'tc qdisc add dev {} root netem'.format(iface)
+    if delay == 0 and loss == 0:
+        return
+    if loss > 0:
+        command = '{} loss {}%'.format(command, loss)
+    if delay > 0:
+        command = '{} delay {}ms'.format(command, delay)
+    print('{} -> "{}"'.format(host.name, command))
+    host.cmd(command)
+
 def get_info(host):
     "Print tc info."
     iface = '{}-eth0'.format(host.name)
-    command = 'tc qdisc show  dev {}'.format(iface)
+    command = 'tc qdisc show dev {} >> stats.log'.format(iface)
     print('{} -> "{}"'.format(host.name, command))
     host.cmdPrint(command)
 
@@ -118,16 +134,20 @@ def main():
         print("Configuring hosts ...")
         # host 1
         h1 = net.get('h1')
-        set_delay(h1, delay)
-        set_loss(h1, loss)
+        conf_host(h1, delay, loss)
+        # set_delay(h1, delay)
+        # set_loss(h1, loss)
         if is_tcp:
             set_min_rto(h1, min_rto)
+        get_info(h1)
         # host 2
         h2 = net.get('h2')
-        set_delay(h2, delay)
-        set_loss(h2, loss)
+        # set_delay(h2, delay)
+        # set_loss(h2, loss)
+        conf_host(h2, delay, loss)
         if is_tcp:
             set_min_rto(h2, min_rto)
+        get_info(h2)
 
         servererr = open('./pingpong/{}-server-{}-{}-{}.err'.format(proto, loss, delay, run), 'w')
         serverout = open('./pingpong/{}-server-{}-{}-{}.out'.format(proto, loss, delay, run), 'w')
