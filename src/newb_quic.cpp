@@ -182,7 +182,7 @@ quic_transport::connect(const std::string& host, uint16_t port,
     return io::network::invalid_native_socket; // cant I return some error?
   }
 
-  mozquic_config_t config;
+  mozquic_config_t config {};
   memset(&config, 0, sizeof(mozquic_config_t));
   // handle IO manually. automatic handling not yet implemented.
   config.handleIO = 0;
@@ -223,51 +223,6 @@ quic_transport::connect(const std::string& host, uint16_t port,
     return io::network::invalid_native_socket;
   else
     return mozquic_osfd(connection);
-}
-
-expected<io::network::native_socket>
-        accept_quic::create_socket(uint16_t port, const char*, bool) {
-  // check for nss_config
-  char nss_config[] = "/home/jakob/CLionProjects/measuring-newbs/nss-config/";
-  if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
-    std::cerr << "nss-config failure" << std::endl;
-    return io::network::invalid_native_socket;
-  }
-
-  mozquic_config_t config;
-  memset(&config, 0, sizeof(mozquic_config_t));
-  config.originName = "foo.example.com";
-  config.originPort = port;
-  config.handleIO = 0;
-  config.appHandlesLogging = 0;
-  config.ipv6 = 1;
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "tolerateBadALPN", 1,
-                                          nullptr), "setup-bad_ALPN");
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "tolerateNoTransportParams",
-                                          1, nullptr), "setup-noTransport");
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "sabotageVN", 0, nullptr),
-                    "setup-sabotage");
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "forceAddressValidation", 0,
-                                          nullptr), "setup-addrValidation->0");
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "streamWindow", 4906,
-                                          nullptr), "setup-streamWindow");
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "connWindow", 8192, nullptr),
-                    "setup-connWindow");
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr),
-                    "setup-0rtt");
-
-  // setting up the connection
-  CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection, &config),
-                    "setup-new_conn_ip6");
-  CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection, connEventCB),
-                    "setup-event_cb_ip6");
-  CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection, &closure),
-                    "setup-event_cb_closure");
-  CHECK_MOZQUIC_ERR(mozquic_start_server(connection),
-                    "setup-start_server_ip6");
-  std::cout << "server initialized - Listening on port " << config.originPort << " with fd = " << mozquic_osfd(connection) << std::endl;
-
-  return mozquic_osfd(connection);
 }
 
 } // namespace policy

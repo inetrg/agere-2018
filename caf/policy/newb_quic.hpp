@@ -19,6 +19,8 @@
 #pragma once
 
 #include <zconf.h>
+#include "caf/io/newb.hpp"
+#include "caf/config.hpp"
 #include "caf/io/network/default_multiplexer.hpp"
 #include "caf/io/network/native_socket.hpp"
 #include "caf/policy/accept.hpp"
@@ -31,7 +33,7 @@ namespace caf {
 namespace policy {
 
 struct quic_transport : public transport {
-  quic_transport(mozquic_connection_t* conn = nullptr);
+  explicit quic_transport(mozquic_connection_t* conn = nullptr);
 
   ~quic_transport() override {
     if (connection) {
@@ -56,7 +58,7 @@ struct quic_transport : public transport {
 
   expected<io::network::native_socket>
   connect(const std::string& host, uint16_t port,
-          optional<io::network::protocol::network> preferred = none) override;
+          optional<io::network::protocol::network>) override;
 
   // State for reading.
   size_t read_threshold;
@@ -89,14 +91,56 @@ struct accept_quic : public accept<Message> {
   }
 
   expected<io::network::native_socket>
-  create_socket(uint16_t port, const char*, bool) override;
+  create_socket(uint16_t port, const char*, bool) {
+    // check for nss_config
+    char nss_config[] = "/home/jakob/CLionProjects/measuring-newbs/nss-config/";
+    if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
+      std::cerr << "nss-config failure" << std::endl;
+      return io::network::invalid_native_socket;
+    }
+
+    mozquic_config_t config;
+    memset(&config, 0, sizeof(mozquic_config_t));
+    config.originName = "foo.example.com";
+    config.originPort = port;
+    config.handleIO = 0;
+    config.appHandlesLogging = 0;
+    config.ipv6 = 1;
+    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "tolerateBadALPN", 1,
+                                            nullptr), "setup-bad_ALPN");
+    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "tolerateNoTransportParams",
+                                            1, nullptr), "setup-noTransport");
+    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "sabotageVN", 0, nullptr),
+                      "setup-sabotage");
+    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "forceAddressValidation", 0,
+                                            nullptr), "setup-addrValidation->0");
+    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "streamWindow", 4906,
+                                            nullptr), "setup-streamWindow");
+    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "connWindow", 8192, nullptr),
+                      "setup-connWindow");
+    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr),
+                      "setup-0rtt");
+
+    // setting up the connection
+    CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection, &config),
+                      "setup-new_conn_ip6");
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection, connEventCB),
+                      "setup-event_cb_ip6");
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection, &closure),
+                      "setup-event_cb_closure");
+    CHECK_MOZQUIC_ERR(mozquic_start_server(connection),
+                      "setup-start_server_ip6");
+    std::cout << "server initialized - Listening on port " << config.originPort << " with fd = " << mozquic_osfd(connection) << std::endl;
+
+    return mozquic_osfd(connection);
+  }
 
   void read_event(caf::io::newb_base*) {
     using namespace io::network;
     int i = 0;
     do {
       mozquic_IO(connection);
-      usleep (1000); // this is for handleio todo
+      usleep (1000);
     } while(++i < 20);
   /*
     if(closure.new_connection) {
@@ -121,7 +165,7 @@ struct accept_quic : public accept<Message> {
     int i = 0;
     do {
       mozquic_IO(connection);
-      usleep(1000); // this is for handleio todo
+      usleep(1000);
     } while(++i < 20);
 
     if(closure.new_connection) {
@@ -136,29 +180,9 @@ struct accept_quic : public accept<Message> {
     return {0, nullptr};
   }
 
-  void init(io::newb_base& n) {
-    n.start();
+  void init(io::newb_base*, io::newb<Message>& spawned) override {
+    spawned.start();
   }
-
-/*
-  expected<actor> create_newb(io::network::native_socket sockfd,
-                              transport_ptr pol) override {
-    CAF_LOG_TRACE(CAF_ARG(sockfd));
-    auto n = io::network::make_newb<raw_newb>(this->backend().system(), sockfd);
-    auto ptr = caf::actor_cast<caf::abstract_actor*>(n);
-    if (ptr == nullptr)
-      return sec::runtime_error;
-    auto& ref = dynamic_cast<raw_newb&>(*ptr);
-    // TODO: Transport has to be assigned before protocol ... which sucks.
-    //  (basp protocol calls configure read which accesses the transport.)
-    ref.transport = std::move(pol);
-    ref.protocol.reset(new ProtocolPolicy(&ref));
-    ref.responder = responder;
-    ref.configure_read(io::receive_policy::exactly(1000));
-    // TODO: Just a workaround.
-    anon_send(responder, n);
-    return n;
-  }*/
 
   // connection state
   mozquic_connection_t* connection;

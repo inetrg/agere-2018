@@ -95,9 +95,6 @@ else()
   message(FATAL_ERROR "could not find NSPR.")
 endif()
 
-#set(THREADS_PREFER_PTHREAD_FLAG ON)
-#find_package(Threads REQUIRED)
-
 find_package(Threads)
 
 if(NOT BENCHMARK_ROOT_DIR)
@@ -135,7 +132,9 @@ add_executable(quic_chat_test
         src/newb_quic.cpp
         caf/policy/newb_quic.hpp
         src/mozquic_helper.hpp
-        src/mozquic_CB.h)
+        src/mozquic_CB.h
+        src/mozquic_CB.cpp)
+
 target_link_libraries(
         quic_chat_test
         ${CMAKE_DL_LIBS}
@@ -145,4 +144,5 @@ target_link_libraries(
         ${NSS_LIBRARIES}
         ${NSPR_LIBRARIES}
         ${MOZQUIC_LIBRARIES})
+
 add_dependencies(quic_chat_test newb_measurements)

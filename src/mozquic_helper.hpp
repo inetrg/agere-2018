@@ -7,11 +7,7 @@
 #ifndef MOZQUIC_EXAMPLE_MOZQUIC_HELPER_H
 #define MOZQUIC_EXAMPLE_MOZQUIC_HELPER_H
 
-static bool check_flag = true;
-
-static void should_check(bool flag) {
-  check_flag = flag;
-}
+static bool check_flag = false;
 
 #define CHECK_MOZQUIC_ERR(err, msg) \
 if (err && check_flag) {\
