@@ -62,8 +62,6 @@
 namespace caf {
 namespace policy {
 
-int connEventCB(void* closure, uint32_t event, void* param);
-
 quic_transport::quic_transport(mozquic_connection_t* conn)
         : read_threshold{0},
           collected{0},
@@ -173,55 +171,6 @@ void quic_transport::flush(io::newb_base* parent) {
   }
 }
 
-int connEventCB(void* closure, uint32_t event, void* param) {
-  switch (event) {
-    case MOZQUIC_EVENT_CONNECTED: {
-      auto clo = static_cast<client_closure *>(closure);
-      std::cout << "connected" << std::endl;
-      clo->connected = true;
-      break;
-    }
-
-    case MOZQUIC_EVENT_NEW_STREAM_DATA: {
-      auto clo = static_cast<client_closure *>(closure);
-      mozquic_stream_t *stream = param;
-      if (mozquic_get_streamid(stream) & 0x3)
-        break;
-      uint32_t received = 0;
-      int fin = 0;
-      clo->receive_buffer.resize(1024); // allocate enough space for reading into
-                                   // the receive_buffer
-      do {
-        int code = mozquic_recv(stream, clo->receive_buffer.data(),
-                1024,
-                &received,
-                &fin);
-        if (code != MOZQUIC_OK)
-          return code;
-        clo->amount_read += received; // gather amount that was read
-
-      } while(received > 0 && !fin);
-      break;
-    }
-
-    case MOZQUIC_EVENT_CLOSE_CONNECTION:
-    case MOZQUIC_EVENT_ERROR:
-      return mozquic_destroy_connection(param);
-
-    case MOZQUIC_EVENT_ACCEPT_NEW_CONNECTION: {
-      auto clo = static_cast<server_closure*>(closure);
-      mozquic_set_event_callback(param, connEventCB);
-      mozquic_set_event_callback_closure(param, closure);
-      clo->new_connection = param;
-      break;
-    }
-
-    default:
-      break;
-  }
-
-  return MOZQUIC_OK;
-}
 
 expected<io::network::native_socket>
 quic_transport::connect(const std::string& host, uint16_t port,
@@ -277,7 +226,7 @@ quic_transport::connect(const std::string& host, uint16_t port,
 }
 
 expected<io::network::native_socket>
-accept_quic::create_socket(uint16_t port, const char*, bool) {
+        accept_quic::create_socket(uint16_t port, const char*, bool) {
   // check for nss_config
   char nss_config[] = "/home/jakob/CLionProjects/measuring-newbs/nss-config/";
   if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
@@ -319,55 +268,6 @@ accept_quic::create_socket(uint16_t port, const char*, bool) {
   std::cout << "server initialized - Listening on port " << config.originPort << " with fd = " << mozquic_osfd(connection) << std::endl;
 
   return mozquic_osfd(connection);
-}
-
-void accept_quic::read_event(caf::io::newb_base*) {
-  using namespace io::network;
-  int i = 0;
-  do {
-    mozquic_IO(connection);
-    usleep (1000); // this is for handleio todo
-  } while(++i < 20);
-
-  if(closure.new_connection) {
-    int fd = mozquic_osfd(closure.new_connection);
-    transport_ptr transport{new quic_transport{closure.new_connection}};
-    auto en = create_newb(fd, std::move(transport));
-    if (!en) {
-      return;
-    }
-    auto ptr = caf::actor_cast<caf::abstract_actor*>(*en);
-    CAF_ASSERT(ptr != nullptr);
-    auto& ref = dynamic_cast<newb<message>&>(*ptr);
-    init(ref);
-    std::cout << "new connection accepted." << std::endl;
-    closure.new_connection = nullptr;
-  }
-}
-
-std::pair<io::network::native_socket, transport_ptr>
-accept_quic::accept_event(io::newb_base *) {
-  using namespace io::network;
-  int i = 0;
-  do {
-    mozquic_IO(connection);
-    usleep (1000); // this is for handleio todo
-  } while(++i < 20);
-
-  if(closure.new_connection) {
-    std::pair<native_socket, transport_ptr> ret(
-            mozquic_osfd(closure.new_connection),
-            new quic_transport{closure.new_connection}
-            );
-    closure.new_connection = nullptr;
-    std::cout << "new connection accepted." << std::endl;
-    return ret;
-  }
-  return {0, nullptr};
-}
-
-void accept_quic::init(io::newb_base& n) {
-  n.start();
 }
 
 } // namespace policy

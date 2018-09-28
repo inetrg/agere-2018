@@ -135,7 +135,7 @@ add_executable(quic_chat_test
         src/newb_quic.cpp
         caf/policy/newb_quic.hpp
         src/mozquic_helper.hpp
-        )
+        src/mozquic_CB.h)
 target_link_libraries(
         quic_chat_test
         ${CMAKE_DL_LIBS}

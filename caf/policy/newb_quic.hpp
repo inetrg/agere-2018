@@ -18,31 +18,17 @@
 
 #pragma once
 
+#include <zconf.h>
 #include "caf/io/network/default_multiplexer.hpp"
 #include "caf/io/network/native_socket.hpp"
 #include "caf/policy/accept.hpp"
 #include "caf/policy/transport.hpp"
 #include "MozQuic.h"
+#include "../../src/mozquic_helper.hpp"
+#include "../../src/mozquic_CB.h"
 
 namespace caf {
 namespace policy {
-
-struct client_closure {
-  client_closure(byte_buffer& wr_buf, byte_buffer& rec_buf) :
-    write_buffer(wr_buf),
-    receive_buffer(rec_buf) {
-  };
-
-  bool is_server = false;
-  bool connected = false;
-  int amount_read = 0;
-  byte_buffer& write_buffer;
-  byte_buffer& receive_buffer;
-};
-
-struct server_closure {
-    mozquic_connection_t* new_connection = nullptr;
-};
 
 struct quic_transport : public transport {
   quic_transport(mozquic_connection_t* conn = nullptr);
@@ -103,17 +89,57 @@ struct accept_quic : public accept<Message> {
   }
 
   expected<io::network::native_socket>
-  create_socket(uint16_t port, const char* host, bool reuse = false) override;
+  create_socket(uint16_t port, const char*, bool) override;
+
+  void read_event(caf::io::newb_base*) {
+    using namespace io::network;
+    int i = 0;
+    do {
+      mozquic_IO(connection);
+      usleep (1000); // this is for handleio todo
+    } while(++i < 20);
+  /*
+    if(closure.new_connection) {
+      int fd = mozquic_osfd(closure.new_connection);
+      transport_ptr transport{new quic_transport{closure.new_connection}};
+      auto en = create_newb(fd, std::move(transport));
+      if (!en) {
+        return;
+      }
+      auto ptr = caf::actor_cast<caf::abstract_actor*>(*en);
+      CAF_ASSERT(ptr != nullptr);
+      auto& ref = dynamic_cast<newb<message>&>(*ptr);
+      init(ref);
+      std::cout << "new connection accepted." << std::endl;
+      closure.new_connection = nullptr;
+    }*/
+  }
 
   std::pair<io::network::native_socket, transport_ptr>
-    accept_event(io::newb_base *parent) override;
+  accept_event(io::newb_base *) {
+    using namespace io::network;
+    int i = 0;
+    do {
+      mozquic_IO(connection);
+      usleep(1000); // this is for handleio todo
+    } while(++i < 20);
 
-  /// If `manual_read` is set to true, the acceptor will only call
-  /// this function for new read event and let the policy handle everything
-  /// else.
-  void read_event(io::newb_base*) override;
+    if(closure.new_connection) {
+      std::pair<native_socket, transport_ptr> ret(
+              mozquic_osfd(closure.new_connection),
+              new quic_transport{closure.new_connection}
+      );
+      closure.new_connection = nullptr;
+      std::cout << "new connection accepted." << std::endl;
+      return ret;
+    }
+    return {0, nullptr};
+  }
 
-  void init(io::newb_base& n) override;
+  void init(io::newb_base& n) {
+    n.start();
+  }
+
 /*
   expected<actor> create_newb(io::network::native_socket sockfd,
                               transport_ptr pol) override {
