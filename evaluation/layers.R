@@ -3,7 +3,9 @@ library(ggplot2)
 require(RColorBrewer)
 require(gridExtra)
 
+# Read benchmark results.
 df <- read.csv("evaluation/layers.csv", sep=",", skip=8)
+
 # Clean empty columns.
 emptycols <- sapply(df, function (k) all(is.na(k)))
 df <- df[!emptycols]
@@ -11,7 +13,7 @@ df <- df[!emptycols]
 # Separate test input size from name.
 df$tmp_name <- data.frame(do.call('rbind', strsplit(as.character(df$name), '/', fixed=TRUE)))
 
-# sepearate type from size
+#Ssepearate type from size.
 df$tmp_size <- data.frame(do.call('rbind', strsplit(as.character(df$tmp_name$X2), '_', fixed=TRUE)))
 
 # Add a tag to differentiatae between udp and tcp tests.
@@ -19,11 +21,11 @@ df$benchmark <- df$tmp_name$X1
 df$size <- df$tmp_size$X1
 df$type <- df$tmp_size$X2
 
-# drop weird ones
+# Drop weird ones.
 keeps <- c("benchmark", "size", "type", "real_time")
 df <- df[keeps]
 
-#  extract values
+# Extract values.
 all_stddev <- split(df,df$type)[['stddev']]
 all_median <- split(df,df$type)[['median']]
 df <- split(df,df$type)[['mean']]
@@ -36,11 +38,13 @@ df$proto <- data.frame(ifelse(grepl("tcp", df$benchmark), "tcp", "udp"))
 df$benchmark <- as.character(df$benchmark)
 df$size <- as.numeric(as.character(df$size))
 
-# drop everything > 16384
+# Drop everything > 16384.
 df <- df[! (df$size == 16384), ]
 
 df$upper <- df$real_time + df$stddev
 df$lower <- df$real_time - df$stddev
+
+
 
 # Get UDP related data.
 udp <- split(df,df$proto)[['udp']]
@@ -78,11 +82,14 @@ udp_send_plot <- ggplot(udp_send, aes(x=size, y=real_time / 1000, color=benchmar
                  ) +
                  scale_color_brewer(type="qual", palette=6) +
                  labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
-#ggsave("figs/udp_send.pdf", plot=udp_send_plot, width=3.4, height=2.3)
-### tikz export
+
+# Create graphs.
 tikz(file="figs/udp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
 udp_send_plot
 dev.off()
+ggsave("figs/udp_send.pdf", plot=udp_send_plot, width=3.4, height=2.3)
+
+
 
 # Get UDP receive tests.
 udp_receive <- split(udp,udp$operation)[['receive']]
@@ -127,11 +134,14 @@ udp_receive_single_plot <- ggplot(udp_receive_single, aes(x=size, y=real_time / 
                            ) +
                            scale_color_brewer(type="qual", palette=6) +
                            labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
-#ggsave("figs/udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height=2.3)
-### tikz export
+
+# Create graphs.
 tikz(file="figs/udp_receive_single.tikz", sanitize=TRUE, width=3.4, height=2.3)
 udp_receive_single_plot
 dev.off()
+ggsave("figs/udp_receive_single.pdf", plot=udp_receive_single_plot, width=3.4, height=2.3)
+
+
 
 # Process sequence results.
 udp_receive_sequence <- split(udp_receive,udp_receive$sequence)[['yes']]
@@ -139,38 +149,41 @@ udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_inorder", "O
 udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_dropped", "Dropped", udp_receive_sequence$benchmark)
 udp_receive_sequence$benchmark <- gsub("BM_receive_udp_raw_sequence_late",    "Late", udp_receive_sequence$benchmark)
 udp_receive_sequence_plot <- ggplot(udp_receive_sequence, aes(x=size, y=real_time / 1000, color=benchmark)) +
-                                    geom_line() + # size=0.8) +
-                                    geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
-                                    geom_errorbar(
-                                      mapping=aes(
-                                        ymin=lower / 1000,
-                                        ymax=upper / 1000
-                                      ),
-                                      #size=2,
-                                      width=200
-                                    ) +
-                                    scale_shape_manual(values=c(4, 5, 6)) +
-                                    scale_y_continuous(limits=c(0, 11.2), breaks=seq(0, 10, 2)) + 
-                                    theme_bw() +
-                                    theme(
-                                      legend.title=element_blank(),
-                                      legend.key=element_rect(fill='white'), 
-                                      legend.background=element_rect(fill="white", colour="black", size=0.25),
-                                      legend.direction="horizontal",
-                                      legend.justification=c(0,1),
-                                      legend.position=c(0,1),
-                                      #legend.margin=margin(0,0,0,0),
-                                      legend.box.margin=margin(c(3,3,3,3)),
-                                      legend.key.size=unit(0.8, 'lines'),
-                                      text=element_text(size=9)
-                                    ) +
-                                    scale_color_brewer(type="qual", palette=6) +
-                                    labs(x="Payload Size [bytes]", y="Sequence Handling Time [us]")
-#ggsave("figs/udp_receive_sequence.pdf", plot=udp_receive_sequence_plot, width=3.4, height=2.3)
-### tikz export
+                             geom_line() + # size=0.8) +
+                             geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
+                             geom_errorbar(
+                               mapping=aes(
+                                 ymin=lower / 1000,
+                                 ymax=upper / 1000
+                               ),
+                               #size=2,
+                               width=200
+                             ) +
+                             scale_shape_manual(values=c(4, 5, 6)) +
+                             scale_y_continuous(limits=c(0, 5), breaks=seq(0, 5, 1)) + 
+                             theme_bw() +
+                             theme(
+                               legend.title=element_blank(),
+                               legend.key=element_rect(fill='white'), 
+                               legend.background=element_rect(fill="white", colour="black", size=0.25),
+                               legend.direction="horizontal",
+                               legend.justification=c(0,1),
+                               legend.position=c(0,1),
+                               #legend.margin=margin(0,0,0,0),
+                               legend.box.margin=margin(c(3,3,3,3)),
+                               legend.key.size=unit(0.8, 'lines'),
+                               text=element_text(size=9)
+                             ) +
+                             scale_color_brewer(type="qual", palette=6) +
+                             labs(x="Payload Size [bytes]", y="Sequence Handling Time [us]")
+
+# Create graphs.
 tikz(file="figs/udp_receive_sequence.tikz", sanitize=TRUE, width=3.4, height=2.3)
 udp_receive_sequence_plot
 dev.off()
+ggsave("figs/udp_receive_sequence.pdf", plot=udp_receive_sequence_plot, width=3.4, height=2.3)
+
+
 
 # Get tcp related data.
 tcp <- split(df,df$proto)[['tcp']]
@@ -185,86 +198,81 @@ tcp_send$benchmark <- gsub("BM_send<new_raw_msg, tcp_protocol<raw>>",         "R
 tcp_send$benchmark <- gsub("BM_send<new_basp_msg, tcp_protocol<stream_basp>>", "BASP", tcp_send$benchmark)
 
 tcp_send_plot <- ggplot(tcp_send, aes(x=size, y=real_time/1000, color=benchmark)) +
-                        geom_line() + # size=0.8) +
-                        geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
-                        geom_errorbar(
-                          mapping=aes(
-                            ymin=lower/1000,
-                            ymax=upper/1000
-                          ),
-                          #size=2,
-                          width=200
-                        ) +
-                        scale_shape_manual(values=c(1, 3)) +
-                        theme_bw() +
-                        theme(
-                          legend.title=element_blank(),
-                          legend.key=element_rect(fill='white'), 
-                          legend.background=element_rect(fill="white", colour="black", size=0.25),
-                          legend.direction="vertical",
-                          legend.justification=c(0, 1),
-                          legend.position=c(0, 1),
-                          legend.box.margin=margin(c(3, 3, 3, 3)),
-                          legend.key.size=unit(0.8, 'lines'),
-                          text=element_text(size=9)
-                        ) +
-                        scale_color_brewer(type="qual", palette=6) +
-                        #scale_colour_manual(values=brewer.pal(n=4, name="Dark2")[-c(2,3)]) + # choose colors to match the other plots
-                        labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
+                 geom_line() + # size=0.8) +
+                 geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
+                 geom_errorbar(
+                   mapping=aes(
+                     ymin=lower/1000,
+                     ymax=upper/1000
+                   ),
+                   #size=2,
+                   width=200
+                 ) +
+                 scale_shape_manual(values=c(1, 3)) +
+                 theme_bw() +
+                 theme(
+                   legend.title=element_blank(),
+                   legend.key=element_rect(fill='white'), 
+                   legend.background=element_rect(fill="white", colour="black", size=0.25),
+                   legend.direction="vertical",
+                   legend.justification=c(0, 1),
+                   legend.position=c(0, 1),
+                   legend.box.margin=margin(c(3, 3, 3, 3)),
+                   legend.key.size=unit(0.8, 'lines'),
+                   text=element_text(size=9)
+                 ) +
+                 scale_color_brewer(type="qual", palette=6) +
+                 #scale_colour_manual(values=brewer.pal(n=4, name="Dark2")[-c(2,3)]) + # choose colors to match the other plots
+                 labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 
-# colors <- brewer.pal(n=7, "Oranges")[3:9]
-#basp <- split(tcp,tcp$benchmark)[['BASP']]
-#raw <- split(tcp,tcp$benchmark)[['Raw']]
-#diffs <- basp$real_time - raw$real_time
-
-### pdf export
-#ggsave("figs/tcp_send.pdf", plot=tcp_plot, width=3.4, height=2.3)
-### tikz export
+# Create graphs.
 tikz(file="figs/tcp_send.tikz", sanitize=TRUE, width=3.4, height=2.3)
 tcp_send_plot
 dev.off()
+ggsave("figs/tcp_send.pdf", plot=tcp_send_plot, width=3.4, height=2.3)
+
+
 
 tcp_receive$benchmark <- gsub("BM_receive_tcp_raw",  "Raw",  tcp_receive$benchmark)
 tcp_receive$benchmark <- gsub("BM_receive_tcp_basp", "BASP", tcp_receive$benchmark)
 
 tcp_receive_plot <- ggplot(tcp_receive, aes(x=size, y=real_time/1000, color=benchmark)) +
-                           geom_line() + # size=0.8) +
-                           geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
-                           geom_errorbar(
-                             mapping=aes(
-                               ymin=lower/1000,
-                               ymax=upper/1000
-                             ),
-                             #size=2,
-                             width=200
-                           ) +
-                           scale_shape_manual(values=c(1, 3)) +
-                           #scale_shape_manual(values=c(0, 1, 2, 3)) +
-                           scale_y_continuous(limits=c(0, 0.35), breaks=seq(0, 0.3, 0.1)) + 
-                           theme_bw() +
-                           theme(
-                             legend.title=element_blank(),
-                             legend.key=element_rect(fill='white'), 
-                             legend.background=element_rect(fill="white", colour="black", size=0.25),
-                             legend.direction="horizontal",
-                             legend.justification=c(0, 1),
-                             legend.position=c(0, 1),
-                             legend.box.margin=margin(c(3, 3, 3, 3)),
-                             legend.key.size=unit(0.8, 'lines'),
-                             text=element_text(size=9)
-                           ) +
-                           scale_color_brewer(type="qual", palette=6) +
-                           #scale_colour_manual(values=brewer.pal(n=4, name="Set1")[-c(2,3)]) + # choose colors to match the other plots
-                           labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
+                    geom_line() + # size=0.8) +
+                    geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
+                    geom_errorbar(
+                      mapping=aes(
+                        ymin=lower/1000,
+                        ymax=upper/1000
+                      ),
+                      #size=2,
+                      width=200
+                    ) +
+                    scale_shape_manual(values=c(1, 3)) +
+                    #scale_shape_manual(values=c(0, 1, 2, 3)) +
+                    scale_y_continuous(limits=c(0, 0.35), breaks=seq(0, 0.3, 0.1)) + 
+                    theme_bw() +
+                    theme(
+                      legend.title=element_blank(),
+                      legend.key=element_rect(fill='white'), 
+                      legend.background=element_rect(fill="white", colour="black", size=0.25),
+                      legend.direction="horizontal",
+                      legend.justification=c(0, 1),
+                      legend.position=c(0, 1),
+                      legend.box.margin=margin(c(3, 3, 3, 3)),
+                      legend.key.size=unit(0.8, 'lines'),
+                      text=element_text(size=9)
+                    ) +
+                    scale_color_brewer(type="qual", palette=6) +
+                    #scale_colour_manual(values=brewer.pal(n=4, name="Set1")[-c(2,3)]) + # choose colors to match the other plots
+                    labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 
+# Create graphs.
 tikz(file="figs/tcp_receive.tikz", sanitize=TRUE, width=3.4, height=2.3)
 tcp_receive_plot
 dev.off()
+ggsave("figs/tcp_receive.pdf", plot=tcp_receive_plot, width=3.4, height=2.3)
 
 
-#tikz(file="figs/send_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
-#grid.arrange(tcp_send_plot, udp_send_plot, ncol=2)
-#dev.off()
 
 # Create a plot that combines sending data.
 tcp_send_cleaned <- tcp_send[c("benchmark", "size", "real_time", "upper", "lower")]
@@ -275,40 +283,44 @@ udp_send_cleaned$proto <- 'UDP'
 send_combined <- rbind(tcp_send_cleaned, udp_send_cleaned)
 
 combined_send_plot <- ggplot(send_combined, aes(x=size, y=real_time/1000, color=benchmark)) +
-                             geom_line() + # size=0.8) +
-                             geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
-                             geom_errorbar(
-                               mapping=aes(
-                                 ymin=lower/1000,
-                                 ymax=upper/1000
-                               ),
-                               #size=2,
-                               width=400
-                             ) +
-                             scale_shape_manual(values=c(1, 2, 4, 3)) +
-                             facet_grid(cols=vars(proto)) +
-                             #facet_wrap() +
-                             theme_bw() +
-                             theme(
-                               legend.title=element_blank(),
-                               legend.key=element_rect(fill='white'), 
-                               legend.background=element_rect(fill="white", colour="black", size=0.25),
-                               legend.direction="vertical",
-                               legend.justification=c(0, 1),
-                               legend.position=c(0, 1),
-                               legend.box.margin=margin(c(3, 3, 3, 3)),
-                               legend.key.size=unit(0.8, 'lines'),
-                               text=element_text(size=9),
-                               strip.background=element_blank(),
-                               strip.text.x=element_blank()
-                             ) +
-                             scale_color_brewer(type="qual", palette=6) +
-                             #scale_color_grey() +
-                             labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
+                      geom_line() + # size=0.8) +
+                      geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
+                      geom_errorbar(
+                        mapping=aes(
+                          ymin=lower/1000,
+                          ymax=upper/1000
+                        ),
+                        #size=2,
+                        width=400
+                      ) +
+                      scale_shape_manual(values=c(1, 2, 4, 3)) +
+                      facet_grid(cols=vars(proto)) +
+                      #facet_wrap() +
+                      scale_y_continuous(limits=c(0, 0.4), breaks=seq(0, 0.4, 0.1)) + 
+                      theme_bw() +
+                      theme(
+                        legend.title=element_blank(),
+                        legend.key=element_rect(fill='white'), 
+                        legend.background=element_rect(fill="white", colour="black", size=0.25),
+                        legend.direction="vertical",
+                        legend.justification=c(0, 1),
+                        legend.position=c(0, 1),
+                        legend.box.margin=margin(c(3, 3, 3, 3)),
+                        legend.key.size=unit(0.8, 'lines'),
+                        text=element_text(size=9),
+                        strip.background=element_blank(),
+                        strip.text.x=element_blank()
+                      ) +
+                      scale_color_brewer(type="qual", palette=6) +
+                      #scale_color_grey() +
+                      labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 
+# Create graphs.
 tikz(file="figs/send_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
 combined_send_plot
 dev.off()
+ggsave("figs/send_combined.pdf", plot=combined_send_plot, width=3.4, height=2.3)
+
 
 
 # Create a plot that combines receiving data.
@@ -320,39 +332,40 @@ udp_receive_cleaned$proto <- 'UDP'
 receive_combined <- rbind(tcp_receive_cleaned, udp_receive_cleaned)
 
 combined_receive_plot <- ggplot(receive_combined, aes(x=size, y=real_time/1000, color=benchmark)) +
-                                geom_line() + # size=0.8) +
-                                geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
-                                geom_errorbar(
-                                  mapping=aes(
-                                    ymin=lower/1000,
-                                    ymax=upper/1000
-                                  ),
-                                  #size=2,
-                                  width=400
-                                ) +
-                                scale_shape_manual(values=c(1, 2, 4, 3)) +
-                                facet_grid(cols=vars(proto)) +
-                                #facet_wrap() +
-                                theme_bw() +
-                                theme(
-                                  legend.title=element_blank(),
-                                  legend.key=element_rect(fill='white'), 
-                                  legend.background=element_rect(fill="white", colour="black", size=0.25),
-                                  legend.direction="vertical",
-                                  legend.justification=c(0, 1),
-                                  legend.position=c(0, 0.8),
-                                  legend.box.margin=margin(c(3, 3, 3, 3)),
-                                  legend.key.size=unit(0.8, 'lines'),
-                                  text=element_text(size=9),
-                                  strip.background=element_blank(),
-                                  strip.text.x=element_blank()
-                                ) +
-                                scale_color_brewer(type="qual", palette=6) +
-                                labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
-  
-# ggsave("receive_combined.pdf", plot=combined_receive_plot, width=3.4, height=2.3)
+                         geom_line() + # size=0.8) +
+                         geom_point(aes(shape=benchmark), size = 2, stroke=0.8) +
+                         geom_errorbar(
+                           mapping=aes(
+                             ymin=lower/1000,
+                             ymax=upper/1000
+                           ),
+                           #size=2,
+                           width=400
+                         ) +
+                         scale_shape_manual(values=c(1, 2, 4, 3)) +
+                         facet_grid(cols=vars(proto)) +
+                         #facet_wrap() +
+                         theme_bw() +
+                         scale_y_continuous(limits=c(0, 0.4), breaks=seq(0, 0.4, 0.1)) + 
+                         theme(
+                           legend.title=element_blank(),
+                           legend.key=element_rect(fill='white'), 
+                           legend.background=element_rect(fill="white", colour="black", size=0.25),
+                           legend.direction="vertical",
+                           legend.justification=c(0, 1),
+                           # legend.position=c(0, 0.8),
+                           legend.position=c(0, 1),
+                           legend.box.margin=margin(c(3, 3, 3, 3)),
+                           legend.key.size=unit(0.8, 'lines'),
+                           text=element_text(size=9),
+                           strip.background=element_blank(),
+                           strip.text.x=element_blank()
+                         ) +
+                         scale_color_brewer(type="qual", palette=6) +
+                         labs(x="Payload Size [bytes]", y="Packet Preparation Time [us]")
 
+# Create graphs.
 tikz(file="figs/receive_combined.tikz", sanitize=TRUE, width=3.4, height=2.3)
 combined_receive_plot
 dev.off()
-
+ggsave("figs/receive_combined.pdf", plot=combined_receive_plot, width=3.4, height=2.3)
