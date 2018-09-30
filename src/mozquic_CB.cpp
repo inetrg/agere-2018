@@ -39,6 +39,7 @@ int connEventCB(void *closure, uint32_t event, void *param) {
     case MOZQUIC_EVENT_ERROR:
       return mozquic_destroy_connection(param);
 
+    // server only! accepts incoming connection and saves it to the closure
     case MOZQUIC_EVENT_ACCEPT_NEW_CONNECTION: {
       auto clo = static_cast<server_closure *>(closure);
       mozquic_set_event_callback(param, connEventCB);

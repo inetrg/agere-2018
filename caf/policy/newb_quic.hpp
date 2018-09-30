@@ -33,6 +33,12 @@ namespace caf {
 namespace policy {
 
 struct quic_transport : public transport {
+private:
+  // connection state
+  mozquic_connection_t* connection;
+  client_closure closure;
+
+public:
   explicit quic_transport(mozquic_connection_t* conn = nullptr);
 
   ~quic_transport() override {
@@ -69,15 +75,17 @@ struct quic_transport : public transport {
   // State for writing.
   bool writing;
   size_t written;
-
-  // connection state
-  mozquic_connection_t* connection;
-  client_closure closure;
 };
 
 // only server uses acceptors
 template <class Message>
 struct accept_quic : public accept<Message> {
+private:
+  // connection state
+  mozquic_connection_t* connection;
+  server_closure closure;
+
+public:
   accept_quic() : accept<Message>(true) {
     connection = nullptr;
   };
@@ -135,6 +143,22 @@ struct accept_quic : public accept<Message> {
     return mozquic_osfd(connection);
   }
 
+    virtual expected<actor> create_newb(io::network::native_socket sockfd,
+                                        policy::transport_ptr pol) = 0;
+  /*virtual expected<actor> create_newb(io::network::native_socket sockfd,
+                                      policy::transport_ptr pol) {
+    CAF_LOG_TRACE(CAF_ARG(sockfd));
+    auto n = detail::apply_args_prefixed(
+            io::spawn_newb<io::network::protocol::quic, no_spawn_options, Fun,
+            Ts...>,
+            detail::get_indices(std::tuple(0,0)),
+            nullptr, this->backend().system(),
+            fun_, std::move(pol), sockfd
+    );
+    return n;
+    return
+  }*/
+
   void read_event(caf::io::newb_base*) {
     using namespace io::network;
     int i = 0;
@@ -142,7 +166,7 @@ struct accept_quic : public accept<Message> {
       mozquic_IO(connection);
       usleep (1000);
     } while(++i < 20);
-  /*
+
     if(closure.new_connection) {
       int fd = mozquic_osfd(closure.new_connection);
       transport_ptr transport{new quic_transport{closure.new_connection}};
@@ -152,14 +176,14 @@ struct accept_quic : public accept<Message> {
       }
       auto ptr = caf::actor_cast<caf::abstract_actor*>(*en);
       CAF_ASSERT(ptr != nullptr);
-      auto& ref = dynamic_cast<newb<message>&>(*ptr);
+      auto& ref = dynamic_cast<io::newb<message>&>(*ptr);
       init(ref);
       std::cout << "new connection accepted." << std::endl;
       closure.new_connection = nullptr;
-    }*/
+    }
   }
 
-  std::pair<io::network::native_socket, transport_ptr>
+  /*std::pair<io::network::native_socket, transport_ptr>
   accept_event(io::newb_base *) {
     using namespace io::network;
     int i = 0;
@@ -178,15 +202,11 @@ struct accept_quic : public accept<Message> {
       return ret;
     }
     return {0, nullptr};
-  }
+  }*/
 
   void init(io::newb_base*, io::newb<Message>& spawned) override {
     spawned.start();
   }
-
-  // connection state
-  mozquic_connection_t* connection;
-  server_closure closure;
 };
 
 template <class T>

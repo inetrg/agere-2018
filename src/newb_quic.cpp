@@ -63,14 +63,14 @@ namespace caf {
 namespace policy {
 
 quic_transport::quic_transport(mozquic_connection_t* conn)
-        : read_threshold{0},
+        : connection{conn},
+          closure{send_buffer, receive_buffer},
+          read_threshold{0},
           collected{0},
           maximum{0},
           rd_flag{io::receive_policy_flag::exactly},
           writing{false},
-          written{0},
-          connection{conn},
-          closure{send_buffer, receive_buffer} {
+          written{0} {
   // nop
 }
 
