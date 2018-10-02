@@ -29,7 +29,7 @@ namespace {
     };
 
 
-    behavior tcp_server(stateful_broker<state>* self) {
+    behavior server(stateful_broker<state>* self) {
       return {
               [=](actor responder) {
                   self->state.responder = responder;
@@ -55,7 +55,7 @@ namespace {
       };
     }
 
-    behavior tcp_client(stateful_broker<state>* self, connection_handle hdl) {
+    behavior client(stateful_broker<state>* self, connection_handle hdl) {
       self->state.other = hdl;
       return {
               [=](start_atom, size_t messages, actor responder) {
@@ -175,7 +175,6 @@ namespace {
     void caf_main(actor_system& sys, const config& cfg) {
       using namespace std::chrono;
       using proto_t = quic_protocol<raw>;
-      //using acceptor_t = tcp_acceptor<proto_t>;
       const char* host = cfg.host.c_str();
       const uint16_t port = cfg.port;
       scoped_actor self{sys};
@@ -225,12 +224,12 @@ namespace {
       } else {
         if (cfg.is_server) {
           std::cerr << "creating traditional server" << std::endl;
-          auto es = sys.middleman().spawn_server(tcp_server, port);
+          auto es = sys.middleman().spawn_server(server, port);
           self->send(*es, actor_cast<actor>(self));
           await_done("done");
         } else {
           std::cerr << "creating traditional client" << std::endl;
-          auto ec = sys.middleman().spawn_client(tcp_client, host, port);
+          auto ec = sys.middleman().spawn_client(client, host, port);
           auto start = system_clock::now();
           self->send(*ec, start_atom::value, size_t(cfg.messages),
                      actor_cast<actor>(self));

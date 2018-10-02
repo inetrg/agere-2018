@@ -84,6 +84,7 @@ private:
   // connection state
   mozquic_connection_t* connection;
   server_closure closure;
+  std::vector<transport_ptr*> transports;
 
 public:
   accept_quic() : accept<Message>(true) {
@@ -99,7 +100,7 @@ public:
   }
 
   expected<io::network::native_socket>
-  create_socket(uint16_t port, const char*, bool) {
+  create_socket(uint16_t port, const char*, bool) override {
     // check for nss_config
     char nss_config[] = "/home/jakob/CLionProjects/measuring-newbs/nss-config/";
     if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
@@ -144,65 +145,50 @@ public:
   }
 
   expected<actor> create_newb(io::network::native_socket sockfd,
-                                        policy::transport_ptr pol);
-  /*virtual expected<actor> create_newb(io::network::native_socket sockfd,
+                              policy::transport_ptr pol);
+
+  /*
+  expected<actor> create_newb(io::network::native_socket sockfd,
                                       policy::transport_ptr pol) {
     CAF_LOG_TRACE(CAF_ARG(sockfd));
     auto n = detail::apply_args_prefixed(
-            io::spawn_newb<io::network::protocol::quic, no_spawn_options, Fun,
+            io::spawn_newb<quic_protocol<Message>, no_spawn_options, quic_protocol,
             Ts...>,
-            detail::get_indices(std::tuple(0,0)),
+            detail::get_indices(args_),
             nullptr, this->backend().system(),
             fun_, std::move(pol), sockfd
     );
     return n;
-    return
   }*/
 
-  void read_event(caf::io::newb_base*) {
+  void read_event(io::newb_base* base) override {
     using namespace io::network;
     int i = 0;
     do {
       mozquic_IO(connection);
       usleep (1000);
-    } while(++i < 20);
-
+    } while(++i < 20 && !closure.new_connection);
+    // create newb with new connection
     if(closure.new_connection) {
       int fd = mozquic_osfd(closure.new_connection);
       transport_ptr transport{new quic_transport{closure.new_connection}};
+      transports.emplace_back(&transport);
       auto en = create_newb(fd, std::move(transport));
       if (!en) {
         return;
       }
       auto ptr = caf::actor_cast<caf::abstract_actor*>(*en);
       CAF_ASSERT(ptr != nullptr);
-      auto& ref = dynamic_cast<io::newb<message>&>(*ptr);
-      init(ref);
+      auto& ref = dynamic_cast<io::newb<Message>&>(*ptr);
+      init(base, ref);
       std::cout << "new connection accepted." << std::endl;
       closure.new_connection = nullptr;
+    }
+    // check existing connections for incoming data
+    for (auto& trans : transports) {
+      (*trans)->read_some(base);
     }
   }
-
-  /*std::pair<io::network::native_socket, transport_ptr>
-  accept_event(io::newb_base *) {
-    using namespace io::network;
-    int i = 0;
-    do {
-      mozquic_IO(connection);
-      usleep(1000);
-    } while(++i < 20);
-
-    if(closure.new_connection) {
-      std::pair<native_socket, transport_ptr> ret(
-              mozquic_osfd(closure.new_connection),
-              new quic_transport{closure.new_connection}
-      );
-      closure.new_connection = nullptr;
-      std::cout << "new connection accepted." << std::endl;
-      return ret;
-    }
-    return {0, nullptr};
-  }*/
 
   void init(io::newb_base*, io::newb<Message>& spawned) override {
     spawned.start();
@@ -211,30 +197,30 @@ public:
 
 template <class T>
 struct quic_protocol
-      : public protocol<typename T::message_type> {
-  T impl;
-  quic_protocol(io::newb<typename T::message_type>* parent)
-          : impl(parent) {
-    // nop
-  }
+        : public protocol<typename T::message_type> {
+    T impl;
+    quic_protocol(io::newb<typename T::message_type>* parent)
+            : impl(parent) {
+      // nop
+    }
 
-  error read(char* bytes, size_t count) override {
-    return impl.read(bytes, count);
-  }
+    error read(char* bytes, size_t count) override {
+      return impl.read(bytes, count);
+    }
 
-  error timeout(atom_value atm, uint32_t id) override {
-    return impl.timeout(atm, id);
-  }
+    error timeout(atom_value atm, uint32_t id) override {
+      return impl.timeout(atm, id);
+    }
 
-  void write_header(byte_buffer& buf,
-                    header_writer* hw) override {
-    impl.write_header(buf, hw);
-  }
+    void write_header(byte_buffer& buf,
+                      header_writer* hw) override {
+      impl.write_header(buf, hw);
+    }
 
-  void prepare_for_sending(byte_buffer& buf, size_t hstart,
-                           size_t offset, size_t plen) override {
-    impl.prepare_for_sending(buf, hstart, offset, plen);
-  }
+    void prepare_for_sending(byte_buffer& buf, size_t hstart,
+                             size_t offset, size_t plen) override {
+      impl.prepare_for_sending(buf, hstart, offset, plen);
+    }
 };
 
 } // namespace policy
