@@ -127,8 +127,8 @@ add(src pingpong_udp)
 add(src pingpong_tcp)
 add(src pp_tcp_pure)
 
-add_executable(quic_chat_test
-        src/quic_newb_chat_test.cpp
+add_executable(pingpong_quic
+        src/pingpong_quic.cpp
         src/newb_quic.cpp
         caf/policy/newb_quic.hpp
         src/mozquic_helper.hpp
@@ -136,7 +136,7 @@ add_executable(quic_chat_test
         src/mozquic_CB.cpp)
 
 target_link_libraries(
-        quic_chat_test
+        pingpong_quic
         ${CMAKE_DL_LIBS}
         ${CAF_LIBRARY_IO}
         ${CAF_LIBRARY_CORE}
@@ -145,4 +145,4 @@ target_link_libraries(
         ${NSPR_LIBRARIES}
         ${MOZQUIC_LIBRARIES})
 
-add_dependencies(quic_chat_test newb_measurements)
+add_dependencies(pingpong_quic newb_measurements)

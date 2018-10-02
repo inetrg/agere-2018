@@ -143,8 +143,8 @@ public:
     return mozquic_osfd(connection);
   }
 
-    virtual expected<actor> create_newb(io::network::native_socket sockfd,
-                                        policy::transport_ptr pol) = 0;
+  expected<actor> create_newb(io::network::native_socket sockfd,
+                                        policy::transport_ptr pol);
   /*virtual expected<actor> create_newb(io::network::native_socket sockfd,
                                       policy::transport_ptr pol) {
     CAF_LOG_TRACE(CAF_ARG(sockfd));
