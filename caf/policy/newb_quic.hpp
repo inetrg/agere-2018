@@ -84,7 +84,7 @@ private:
   // connection state
   mozquic_connection_t* connection;
   server_closure closure;
-  std::vector<transport_ptr*> transports;
+  // std::vector<transport_ptr*> transports; TODO: how to trigger actors?
 
 public:
   accept_quic() : accept<Message>(true) {
@@ -156,7 +156,7 @@ public:
     if(closure.new_connection) {
       int fd = mozquic_osfd(closure.new_connection);
       transport_ptr transport{new quic_transport{closure.new_connection}};
-      transports.emplace_back(&transport);
+      // transports.emplace_back(&transport); TODO: how to trigger actors?
       auto en = base->create_newb(fd, std::move(transport));
       if (!en) {
         return;
@@ -168,10 +168,11 @@ public:
       std::cout << "new connection accepted." << std::endl;
       closure.new_connection = nullptr;
     }
+    /*
     // check existing connections for incoming data
     for (auto& trans : transports) {
       (*trans)->read_some(base);
-    }
+    }*/
   }
 
   std::pair<io::network::native_socket, transport_ptr>
@@ -184,39 +185,9 @@ public:
   }
 };
 
+// was a generic protocol before - but written out!
 template <class T>
 using quic_protocol = generic_protocol<T>;
-
-/*
-template <class T>
-struct quic_protocol
-: public io::protocol_policy<typename T::message_type> {
-  T impl;
-
-  quic_protocol(io::newb<typename T::message_type>* parent)
-          : impl(parent) {
-    // nop
-  }
-
-  error read(char* bytes, size_t count) override {
-    return impl.read(bytes, count);
-  }
-
-  error timeout(atom_value atm, uint32_t id) override {
-    return impl.timeout(atm, id);
-  }
-
-  void write_header(byte_buffer& buf,
-                    header_writer* hw) override {
-    impl.write_header(buf, hw);
-  }
-
-  void prepare_for_sending(byte_buffer& buf, size_t hstart,
-                           size_t offset, size_t plen) override {
-    impl.prepare_for_sending(buf, hstart, offset, plen);
-  }
-};
-*/
 
 } // namespace policy
 } // namespace caf
