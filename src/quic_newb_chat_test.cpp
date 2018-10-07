@@ -140,7 +140,7 @@ struct state {
   size_t count = 0;
 };
 
-void caf_main(actor_system& sys, const config& cfg) {
+void caf_main(actor_system&, const config&) {
       /*using acceptor_t = quic_acceptor<quic_protocol<policy::raw>>;
   const char* host = cfg.host.c_str();
   const uint16_t port = cfg.port;

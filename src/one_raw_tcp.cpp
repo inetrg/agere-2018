@@ -177,7 +177,7 @@ struct state {
   size_t count = 0;
 };
 
-void caf_main(actor_system& sys, const config& cfg) {
+void caf_main(actor_system&, const config&) {
   /*
   using acceptor_t = tcp_acceptor<tcp_protocol<policy::raw>>;
   const char* host = cfg.host.c_str();

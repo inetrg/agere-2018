@@ -144,36 +144,20 @@ public:
     return mozquic_osfd(connection);
   }
 
-  expected<actor> create_newb(io::network::native_socket sockfd,
-                              policy::transport_ptr pol);
-
-  /*
-  expected<actor> create_newb(io::network::native_socket sockfd,
-                                      policy::transport_ptr pol) {
-    CAF_LOG_TRACE(CAF_ARG(sockfd));
-    auto n = detail::apply_args_prefixed(
-            io::spawn_newb<quic_protocol<Message>, no_spawn_options, quic_protocol,
-            Ts...>,
-            detail::get_indices(args_),
-            nullptr, this->backend().system(),
-            fun_, std::move(pol), sockfd
-    );
-    return n;
-  }*/
-
-  void read_event(io::newb_base* base) override {
+  void read_event(io::acceptor_base* base) override {
     using namespace io::network;
     int i = 0;
     do {
       mozquic_IO(connection);
       usleep (1000);
     } while(++i < 20 && !closure.new_connection);
+
     // create newb with new connection
     if(closure.new_connection) {
       int fd = mozquic_osfd(closure.new_connection);
       transport_ptr transport{new quic_transport{closure.new_connection}};
       transports.emplace_back(&transport);
-      auto en = create_newb(fd, std::move(transport));
+      auto en = base->create_newb(fd, std::move(transport));
       if (!en) {
         return;
       }
@@ -190,38 +174,49 @@ public:
     }
   }
 
-  void init(io::newb_base*, io::newb<Message>& spawned) override {
+  std::pair<io::network::native_socket, transport_ptr>
+  accept_event(io::acceptor_base *) override {
+    return {0, nullptr};
+  }
+
+  void init(io::acceptor_base*, io::newb<Message>& spawned) override {
     spawned.start();
   }
 };
 
 template <class T>
+using quic_protocol = generic_protocol<T>;
+
+/*
+template <class T>
 struct quic_protocol
-        : public protocol<typename T::message_type> {
-    T impl;
-    quic_protocol(io::newb<typename T::message_type>* parent)
-            : impl(parent) {
-      // nop
-    }
+: public io::protocol_policy<typename T::message_type> {
+  T impl;
 
-    error read(char* bytes, size_t count) override {
-      return impl.read(bytes, count);
-    }
+  quic_protocol(io::newb<typename T::message_type>* parent)
+          : impl(parent) {
+    // nop
+  }
 
-    error timeout(atom_value atm, uint32_t id) override {
-      return impl.timeout(atm, id);
-    }
+  error read(char* bytes, size_t count) override {
+    return impl.read(bytes, count);
+  }
 
-    void write_header(byte_buffer& buf,
-                      header_writer* hw) override {
-      impl.write_header(buf, hw);
-    }
+  error timeout(atom_value atm, uint32_t id) override {
+    return impl.timeout(atm, id);
+  }
 
-    void prepare_for_sending(byte_buffer& buf, size_t hstart,
-                             size_t offset, size_t plen) override {
-      impl.prepare_for_sending(buf, hstart, offset, plen);
-    }
+  void write_header(byte_buffer& buf,
+                    header_writer* hw) override {
+    impl.write_header(buf, hw);
+  }
+
+  void prepare_for_sending(byte_buffer& buf, size_t hstart,
+                           size_t offset, size_t plen) override {
+    impl.prepare_for_sending(buf, hstart, offset, plen);
+  }
 };
+*/
 
 } // namespace policy
 } // namespace caf
