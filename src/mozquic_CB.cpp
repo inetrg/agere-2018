@@ -8,7 +8,6 @@ int connEventCB(void *closure, uint32_t event, void *param) {
   switch (event) {
     case MOZQUIC_EVENT_CONNECTED: {
       auto clo = static_cast<client_closure *>(closure);
-      std::cout << "connected" << std::endl;
       clo->connected = true;
       break;
     }

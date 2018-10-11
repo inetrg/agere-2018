@@ -71,11 +71,13 @@ quic_transport::quic_transport(mozquic_connection_t* conn)
           rd_flag{io::receive_policy_flag::exactly},
           writing{false},
           written{0} {
+  std::cout << "quic_transport()" << std::endl;
   // nop
 }
 
 io::network::rw_state quic_transport::read_some
 (io::newb_base*) {
+  std::cout << "read_some called" << std::endl;
   CAF_LOG_TRACE("");
   int i = 0;
   while (++i < 20) {
@@ -90,15 +92,19 @@ io::network::rw_state quic_transport::read_some
   received_bytes = collected;
   if (received_bytes)
     std::cout << "received data: " << closure.receive_buffer.data() << std::endl;
+
+  std::cout << "read_some done" << std::endl;
   return io::network::rw_state::success;
 }
 
 bool quic_transport::should_deliver() {
+  std::cout << "should_deliver called" << std::endl;
   CAF_LOG_DEBUG(CAF_ARG(collected) << CAF_ARG(read_threshold));
   return collected >= read_threshold;
 }
 
 void quic_transport::prepare_next_read(io::newb_base*) {
+  std::cout << "prepare_next_read called" << std::endl;
   collected = 0;
   received_bytes = 0;
   switch (rd_flag) {
@@ -121,6 +127,7 @@ void quic_transport::prepare_next_read(io::newb_base*) {
       break;
     }
   }
+  std::cout << "prepare_next_read done" << std::endl;
 }
 
 void quic_transport::configure_read(io::receive_policy::config config) {
@@ -130,6 +137,7 @@ void quic_transport::configure_read(io::receive_policy::config config) {
 
 io::network::rw_state quic_transport::write_some(io::newb_base*
 parent) {
+  std::cout << "write_some called" << std::endl;
   CAF_LOG_TRACE("");
   mozquic_stream_t* stream;
   char msg[] = "";
@@ -147,10 +155,12 @@ parent) {
       return io::network::rw_state::failure;
   }
   prepare_next_write(parent);
+  std::cout << "write_some done" << std::endl;
   return io::network::rw_state::success;
 }
 
 void quic_transport::prepare_next_write(io::newb_base* parent) {
+  std::cout << "prepare_next_write called" << std::endl;
   written = 0;
   send_buffer.clear();
   if (offline_buffer.empty()) {
@@ -159,9 +169,11 @@ void quic_transport::prepare_next_write(io::newb_base* parent) {
   } else {
     send_buffer.swap(offline_buffer);
   }
+  std::cout << "prepare_next_write done" << std::endl;
 }
 
 void quic_transport::flush(io::newb_base* parent) {
+  std::cout << "flush called" << std::endl;
   CAF_ASSERT(parent != nullptr);
   CAF_LOG_TRACE(CAF_ARG(offline_buffer.size()));
   if (!offline_buffer.empty() && !writing) {
@@ -169,15 +181,17 @@ void quic_transport::flush(io::newb_base* parent) {
     writing = true;
     prepare_next_write(parent);
   }
+  std::cout << "flush done" << std::endl;
 }
 
 
 expected<io::network::native_socket>
 quic_transport::connect(const std::string& host, uint16_t port,
                        optional<io::network::protocol::network>) {
+  std::cout << "connect called" << std::endl;
+  std::cout << "host=" << host << " port=" << port << std::endl;
   // check for nss_config
-  char nss_config[] = "/home/jakob/CLionProjects/measuring-newbs/nss-config/";
-  if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
+  if (mozquic_nss_config(const_cast<char*>(NSS_CONFIG_PATH)) != MOZQUIC_OK) {
     std::cerr << "nss-config failure" << std::endl;
     return io::network::invalid_native_socket; // cant I return some error?
   }
@@ -213,16 +227,23 @@ quic_transport::connect(const std::string& host, uint16_t port,
 
   uint32_t i=0;
   do {
-    usleep (1000); // this is for handleio todo
-    int code = mozquic_IO(connection);
-    if (code != MOZQUIC_OK)
+    usleep (10000); // this is for handleio todo
+    auto code = mozquic_IO(connection);
+    if (code != MOZQUIC_OK) {
+      std::cerr << "connect: retcode != MOZQUIC_OK!!" << std::endl;
       break;
-  } while (++i < 2000 && !closure.connected);
+    }
+  } while (++i < 4000 && !closure.connected);
 
+  std::cout << "connect done" << std::endl;
+  std::cout << "closure.connected=" << ((closure.connected) ? "true" : "false") << std::endl;
   if (!closure.connected)
     return io::network::invalid_native_socket;
-  else
-    return mozquic_osfd(connection);
+  else {
+    auto fd = mozquic_osfd(connection);
+    std::cout << "" << std::endl;
+    return fd;
+  }
 }
 
 } // namespace policy

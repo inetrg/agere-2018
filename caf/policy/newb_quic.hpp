@@ -32,6 +32,8 @@
 namespace caf {
 namespace policy {
 
+static const char* NSS_CONFIG_PATH = "/home/boss/CLionProjects/measuring-newbs/nss-config/";
+
 struct quic_transport : public transport {
 private:
   // connection state
@@ -42,6 +44,7 @@ public:
   explicit quic_transport(mozquic_connection_t* conn = nullptr);
 
   ~quic_transport() override {
+    std::cout << "~quic_transport()" << std::endl;
     if (connection) {
       mozquic_shutdown_connection(connection);
       mozquic_destroy_connection(connection);
@@ -88,11 +91,13 @@ private:
 
 public:
   accept_quic() : accept<Message>(true) {
+    std::cout << "accept_quic()" << std::endl;
     connection = nullptr;
   };
 
   ~accept_quic() override {
     // destroy all pending connections
+    std::cout << "~accept_quic()" << std::endl;
     if (connection) {
       mozquic_shutdown_connection(connection);
       mozquic_destroy_connection(connection);
@@ -101,9 +106,9 @@ public:
 
   expected<io::network::native_socket>
   create_socket(uint16_t port, const char*, bool) override {
+    std::cout << "create_socket called" << std::endl;
     // check for nss_config
-    char nss_config[] = "/home/jakob/CLionProjects/measuring-newbs/nss-config/";
-    if (mozquic_nss_config(const_cast<char*>(nss_config)) != MOZQUIC_OK) {
+    if (mozquic_nss_config(const_cast<char*>(NSS_CONFIG_PATH)) != MOZQUIC_OK) {
       std::cerr << "nss-config failure" << std::endl;
       return io::network::invalid_native_socket;
     }
@@ -139,6 +144,11 @@ public:
                       "setup-event_cb_closure");
     CHECK_MOZQUIC_ERR(mozquic_start_server(connection),
                       "setup-start_server_ip6");
+    auto i = 0;
+    do {
+      mozquic_IO(connection);
+    } while(++i < 100);
+
     std::cout << "server initialized - Listening on port " << config.originPort << " with fd = " << mozquic_osfd(connection) << std::endl;
 
     return mozquic_osfd(connection);
@@ -146,6 +156,7 @@ public:
 
   void read_event(io::acceptor_base* base) override {
     using namespace io::network;
+    std::cout << "read_event called" << std::endl;
     int i = 0;
     do {
       mozquic_IO(connection);
@@ -168,6 +179,7 @@ public:
       std::cout << "new connection accepted." << std::endl;
       closure.new_connection = nullptr;
     }
+    std::cout << "read_event done" << std::endl;
     /*
     // check existing connections for incoming data
     for (auto& trans : transports) {
@@ -177,11 +189,14 @@ public:
 
   std::pair<io::network::native_socket, transport_ptr>
   accept_event(io::acceptor_base *) override {
+    std::cout << "accept_event called" << std::endl;
     return {0, nullptr};
   }
 
   void init(io::acceptor_base*, io::newb<Message>& spawned) override {
+    std::cout << "init called" << std::endl;
     spawned.start();
+    std::cout << "init done." << std::endl;
   }
 };
 

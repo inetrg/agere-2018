@@ -157,7 +157,7 @@ namespace {
     class config : public actor_system_config {
     public:
         uint16_t port = 12345;
-        std::string host = "127.0.0.1";
+        std::string host = "localhost";
         bool is_server = false;
         size_t messages = 2000;
         bool traditional = false;
@@ -243,4 +243,4 @@ namespace {
 
 } // namespace anonymous
 
-CAF_MAIN(io::middleman);
+CAF_MAIN(io::middleman)
