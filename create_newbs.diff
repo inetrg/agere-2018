@@ -1,0 +1,149 @@
+diff --git a/libcaf_io/caf/io/newb.hpp b/libcaf_io/caf/io/newb.hpp
+index 2f34e27a..a3730d57 100644
+--- a/libcaf_io/caf/io/newb.hpp
++++ b/libcaf_io/caf/io/newb.hpp
+@@ -526,8 +526,17 @@ spawn_client(actor_system& sys, F fun, policy::transport_ptr transport,
+
+ // -- new broker acceptor ------------------------------------------------------
+
++struct acceptor_base : public newb_base {
++  acceptor_base(network::default_multiplexer& dm, network::native_socket sockfd)
++      : newb_base(dm, sockfd) {
++    // nop
++  }
++  virtual expected<actor>
++  create_newb(network::native_socket sockfd, policy::transport_ptr pol) = 0;
++};
++
+ template <class Protocol, class Fun, class... Ts>
+-struct newb_acceptor : public newb_base, public caf::ref_counted {
++struct newb_acceptor : public acceptor_base, public caf::ref_counted {
+   using newb_type = typename std::remove_pointer<first_argument_type<Fun>>::type;
+   using message_type = typename newb_type::message_type;
+
+@@ -535,7 +544,7 @@ struct newb_acceptor : public newb_base, public caf::ref_counted {
+
+   newb_acceptor(network::default_multiplexer& dm, network::native_socket sockfd,
+                 Fun f, policy::accept_ptr<message_type> pol, Ts&&... xs)
+-      : newb_base(dm, sockfd),
++      : acceptor_base(dm, sockfd),
+         accept_pol(std::move(pol)),
+         fun_(std::move(f)),
+         reading_(false),
+@@ -666,8 +675,8 @@ struct newb_acceptor : public newb_base, public caf::ref_counted {
+     accept_pol->write_event(this);
+   }
+
+-  virtual expected<actor> create_newb(network::native_socket sockfd,
+-                                      policy::transport_ptr pol) {
++  expected<actor> create_newb(network::native_socket sockfd,
++                              policy::transport_ptr pol) override {
+     CAF_LOG_TRACE(CAF_ARG(sockfd));
+     auto n = detail::apply_args_prefixed(
+       io::spawn_newb<Protocol, no_spawn_options, Fun, Ts...>,
+diff --git a/libcaf_io/caf/policy/accept.hpp b/libcaf_io/caf/policy/accept.hpp
+index 50491fd4..12f9cc47 100644
+--- a/libcaf_io/caf/policy/accept.hpp
++++ b/libcaf_io/caf/policy/accept.hpp
+@@ -25,7 +25,7 @@
+ namespace caf {
+ namespace io {
+
+-struct newb_base;
++struct acceptor_base;
+
+ template<class Message>
+ struct newb;
+@@ -49,22 +49,22 @@ struct accept {
+   create_socket(uint16_t port, const char* host, bool reuse = false) = 0;
+
+   virtual std::pair<io::network::native_socket, transport_ptr>
+-  accept_event(io::newb_base*) {
++  accept_event(io::acceptor_base*) {
+     return {0, nullptr};
+   }
+
+   /// If `requires_raw_data` is set to true, the acceptor will only call
+   /// this function for new read event and let the policy handle everything
+   /// else.
+-  virtual void read_event(io::newb_base*) {
++  virtual void read_event(io::acceptor_base*) {
+     // nop
+   }
+
+-  virtual error write_event(io::newb_base*) {
++  virtual error write_event(io::acceptor_base*) {
+     return none;
+   }
+
+-  virtual void init(io::newb_base*, io::newb<Message>&) {
++  virtual void init(io::acceptor_base*, io::newb<Message>&) {
+     // nop
+   }
+
+diff --git a/libcaf_io/caf/policy/newb_tcp.hpp b/libcaf_io/caf/policy/newb_tcp.hpp
+index 480b3d1a..a8d7fb08 100644
+--- a/libcaf_io/caf/policy/newb_tcp.hpp
++++ b/libcaf_io/caf/policy/newb_tcp.hpp
+@@ -58,7 +58,7 @@ struct tcp_transport : public transport {
+   size_t written;
+ };
+
+-io::network::native_socket get_newb_socket(io::newb_base*);
++io::network::native_socket get_newb_socket(io::acceptor_base*);
+
+ template <class Message>
+ struct accept_tcp : public accept<Message> {
+@@ -68,7 +68,7 @@ struct accept_tcp : public accept<Message> {
+   }
+
+   std::pair<io::network::native_socket, transport_ptr>
+-  accept_event(io::newb_base* parent) override {
++  accept_event(io::acceptor_base* parent) override {
+     auto esock = io::network::accept_tcp_connection(get_newb_socket(parent));
+     if (!esock) {
+       return {io::network::invalid_native_socket, nullptr};
+@@ -77,7 +77,7 @@ struct accept_tcp : public accept<Message> {
+     return {*esock, std::move(ptr)};
+   }
+
+-  void init(io::newb_base*, io::newb<Message>& spawned) override {
++  void init(io::acceptor_base*, io::newb<Message>& spawned) override {
+     spawned.start();
+   }
+ };
+diff --git a/libcaf_io/caf/policy/newb_udp.hpp b/libcaf_io/caf/policy/newb_udp.hpp
+index 8145489e..f0cb2aa1 100644
+--- a/libcaf_io/caf/policy/newb_udp.hpp
++++ b/libcaf_io/caf/policy/newb_udp.hpp
+@@ -82,7 +82,7 @@ struct accept_udp : public accept<Message> {
+   }
+
+   std::pair<io::network::native_socket, transport_ptr>
+-  accept_event(io::newb_base*) override {
++  accept_event(io::acceptor_base*) override {
+     std::cout << "Accepting msg from UDP endpoint" << std::endl;
+     auto res = io::network::new_local_udp_endpoint_impl(0, nullptr, true);
+     if (!res) {
+@@ -94,7 +94,7 @@ struct accept_udp : public accept<Message> {
+     return {sock, std::move(ptr)};
+   }
+
+-  void init(io::newb_base* parent, io::newb<Message>& spawned) override {
++  void init(io::acceptor_base* parent, io::newb<Message>& spawned) override {
+     spawned.trans->prepare_next_read(parent);
+     spawned.trans->read_some(parent, *spawned.proto.get());
+     spawned.start();
+diff --git a/libcaf_io/src/newb_tcp.cpp b/libcaf_io/src/newb_tcp.cpp
+index 16299115..6da58a4e 100644
+--- a/libcaf_io/src/newb_tcp.cpp
++++ b/libcaf_io/src/newb_tcp.cpp
+@@ -178,7 +178,7 @@ tcp_transport::connect(const std::string& host, uint16_t port,
+   return io::network::new_tcp_connection(host, port, preferred);
+ }
+
+-io::network::native_socket get_newb_socket(io::newb_base* n) {
++io::network::native_socket get_newb_socket(io::acceptor_base* n) {
+   return n->fd();
+ }
+
