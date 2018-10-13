@@ -64,7 +64,7 @@ namespace policy {
 
 quic_transport::quic_transport(mozquic_connection_t* conn)
         : connection{conn},
-          closure{send_buffer, receive_buffer},
+          closure(&send_buffer, &receive_buffer),
           read_threshold{0},
           collected{0},
           maximum{0},
@@ -72,7 +72,8 @@ quic_transport::quic_transport(mozquic_connection_t* conn)
           writing{false},
           written{0} {
   std::cout << "quic_transport()" << std::endl;
-  // nop
+  if(conn)
+    mozquic_set_event_callback_closure(conn, &closure);
 }
 
 io::network::rw_state quic_transport::read_some
@@ -91,7 +92,8 @@ io::network::rw_state quic_transport::read_some
   collected += result;
   received_bytes = collected;
   if (received_bytes)
-    std::cout << "received data: " << closure.receive_buffer.data() << std::endl;
+    std::cout << "received data: " << closure.receive_buffer->data() <<
+    std::endl;
 
   std::cout << "read_some done" << std::endl;
   return io::network::rw_state::success;
@@ -188,6 +190,7 @@ void quic_transport::flush(io::newb_base* parent) {
 expected<io::network::native_socket>
 quic_transport::connect(const std::string& host, uint16_t port,
                        optional<io::network::protocol::network>) {
+  setenv("MOZQUIC_LOG", "all:9", 0);
   std::cout << "connect called" << std::endl;
   std::cout << "host=" << host << " port=" << port << std::endl;
   // check for nss_config
@@ -213,33 +216,39 @@ quic_transport::connect(const std::string& host, uint16_t port,
                     "connect-noTransportParams");
   CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "maxSizeAllowed", 1452,
                                           nullptr), "connect-maxSize");
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr),
+  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 0, nullptr),
                     "connect-0rtt");
 
-  // open new connection
   CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection, &config),
                     "connect-new_conn");
-  CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection, connEventCB),
+  CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection,
+          connectionCB_connect),
                     "connect-callback");
   CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection, &closure),
-                    "connect-callback closure");
+                    "connect-callback closure_ip4");
   CHECK_MOZQUIC_ERR(mozquic_start_client(connection), "connect-start");
+
+  std::cout << closure.message << std::endl;
 
   uint32_t i=0;
   do {
-    usleep (10000); // this is for handleio todo
+    usleep (1000); // this is for handleio todo
     auto code = mozquic_IO(connection);
     if (code != MOZQUIC_OK) {
       std::cerr << "connect: retcode != MOZQUIC_OK!!" << std::endl;
       break;
     }
-  } while (++i < 4000 && !closure.connected);
+  } while (++i < 2000 && !closure.connected);
+
+  std::cout << closure.message << std::endl;
 
   std::cout << "connect done" << std::endl;
   std::cout << "closure.connected=" << ((closure.connected) ? "true" : "false") << std::endl;
   if (!closure.connected)
     return io::network::invalid_native_socket;
   else {
+    // switch to transport callback to receive data later on
+    mozquic_set_event_callback(&connection, connectionCB_transport);
     auto fd = mozquic_osfd(connection);
     std::cout << "" << std::endl;
     return fd;

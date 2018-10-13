@@ -8,20 +8,28 @@
 #include "caf/policy/transport.hpp"
 #include <cstdint>
 
-int connEventCB(void *closure, uint32_t event, void *param);
+int connectionCB_accept(void *closure, uint32_t event, void *param);
+int connectionCB_transport(void *closure, uint32_t event, void *param);
+int connectionCB_connect(void *closure, uint32_t event, void *param);
 
-struct client_closure {
-  client_closure(caf::policy::byte_buffer &wr_buf, caf::policy::byte_buffer &rec_buf) :
-          write_buffer(wr_buf),
-          receive_buffer(rec_buf) {
+
+struct transport_closure {
+  transport_closure(caf::policy::byte_buffer* wr_buf, caf::policy::byte_buffer*
+                    rec_buf) :
+          connected{false},
+          amount_read{0},
+          write_buffer{wr_buf},
+          receive_buffer{rec_buf},
+          message(""){
   };
 
-  bool connected = false;
-  int amount_read = 0;
-  caf::policy::byte_buffer &write_buffer;
-  caf::policy::byte_buffer &receive_buffer;
+  bool connected;
+  int amount_read;
+  caf::policy::byte_buffer* write_buffer;
+  caf::policy::byte_buffer* receive_buffer;
+  std::string message;
 };
 
-struct server_closure {
-  mozquic_connection_t *new_connection = nullptr;
+struct accept_closure {
+  mozquic_connection_t* new_connection = nullptr;
 };

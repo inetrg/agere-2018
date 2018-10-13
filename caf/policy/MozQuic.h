@@ -32,7 +32,7 @@ static const uint32_t mozquic_library_version = 1;
     MOZQUIC_ERR_DEFERRED         = 8,
   };
 
-  // The event Callbacks receive an application specified closure,
+  // The event Callbacks receive an application specified closure_ip4,
   // an ID (this enum), and the argument pointer defined here
   enum {
     // NAME                              ID     POINTER TYPE

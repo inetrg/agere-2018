@@ -32,13 +32,14 @@
 namespace caf {
 namespace policy {
 
-static const char* NSS_CONFIG_PATH = "/home/boss/CLionProjects/measuring-newbs/nss-config/";
+static const char* NSS_CONFIG_PATH =
+        "/home/boss/CLionProjects/agere-2018/nss-config/";
 
 struct quic_transport : public transport {
 private:
-  // connection state
+  // connection_ip4 state
   mozquic_connection_t* connection;
-  client_closure closure;
+  transport_closure closure;
 
 public:
   explicit quic_transport(mozquic_connection_t* conn = nullptr);
@@ -84,28 +85,35 @@ public:
 template <class Message>
 struct accept_quic : public accept<Message> {
 private:
-  // connection state
-  mozquic_connection_t* connection;
-  server_closure closure;
+  // connection_ip4 state
+  mozquic_connection_t* connection_ip4;
+  mozquic_connection_t* connection_ip6;
+  mozquic_connection_t* hrr;
+  mozquic_connection_t* hrr6;
+  accept_closure closure_ip4;
+  accept_closure closure_ip6;
+  accept_closure closure_hrr;
+  accept_closure closure_hrr6;
   // std::vector<transport_ptr*> transports; TODO: how to trigger actors?
 
 public:
   accept_quic() : accept<Message>(true) {
     std::cout << "accept_quic()" << std::endl;
-    connection = nullptr;
+    connection_ip4 = nullptr;
   };
 
   ~accept_quic() override {
     // destroy all pending connections
     std::cout << "~accept_quic()" << std::endl;
-    if (connection) {
-      mozquic_shutdown_connection(connection);
-      mozquic_destroy_connection(connection);
+    if (connection_ip4) {
+      mozquic_shutdown_connection(connection_ip4);
+      mozquic_destroy_connection(connection_ip4);
     }
   }
 
   expected<io::network::native_socket>
   create_socket(uint16_t port, const char*, bool) override {
+    setenv("MOZQUIC_LOG", "all:9", 0);
     std::cout << "create_socket called" << std::endl;
     // check for nss_config
     if (mozquic_nss_config(const_cast<char*>(NSS_CONFIG_PATH)) != MOZQUIC_OK) {
@@ -119,7 +127,7 @@ public:
     config.originPort = port;
     config.handleIO = 0;
     config.appHandlesLogging = 0;
-    config.ipv6 = 1;
+    config.ipv6 = 0;
     CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "tolerateBadALPN", 1,
                                             nullptr), "setup-bad_ALPN");
     CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "tolerateNoTransportParams",
@@ -132,39 +140,84 @@ public:
                                             nullptr), "setup-streamWindow");
     CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "connWindow", 8192, nullptr),
                       "setup-connWindow");
-    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr),
+    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 0, nullptr),
                       "setup-0rtt");
 
-    // setting up the connection
-    CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection, &config),
+    // setting up the connection_ip4
+    CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection_ip4, &config),
                       "setup-new_conn_ip6");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection, connEventCB),
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection_ip4, connectionCB_accept),
                       "setup-event_cb_ip6");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection, &closure),
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection_ip4, &closure_ip4),
                       "setup-event_cb_closure");
-    CHECK_MOZQUIC_ERR(mozquic_start_server(connection),
+    CHECK_MOZQUIC_ERR(mozquic_start_server(connection_ip4),
                       "setup-start_server_ip6");
+
+    // setting up the connection_ip4
+    config.ipv6 = 1;
+    CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection_ip6, &config),
+                      "setup-new_conn_ip6");
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection_ip6,
+            connectionCB_accept),
+                      "setup-event_cb_ip6");
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection_ip6,
+            &closure_ip6),
+                      "setup-event_cb_closure");
+    CHECK_MOZQUIC_ERR(mozquic_start_server(connection_ip6),
+                      "setup-start_server_ip6");
+
+    // setting up the connection_ip4
+    config.originPort = port + 1;
+    config.ipv6 = 0;
+    mozquic_unstable_api1(&config, "forceAddressValidation", 1, 0);
+    CHECK_MOZQUIC_ERR(mozquic_new_connection(&hrr, &config),
+                      "setup-new_conn_ip6");
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(hrr, connectionCB_accept),
+                      "setup-event_cb_ip6");
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(hrr, &closure_hrr),
+                      "setup-event_cb_closure");
+    CHECK_MOZQUIC_ERR(mozquic_start_server(hrr),
+                      "setup-start_server_ip6");
+
+    // setting up the connection_ip4
+    config.ipv6 = 1;
+    CHECK_MOZQUIC_ERR(mozquic_new_connection(&hrr6, &config),
+                      "setup-new_conn_ip6");
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(hrr6, connectionCB_accept),
+                      "setup-event_cb_ip6");
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(hrr6, &closure_hrr6),
+                      "setup-event_cb_closure");
+    CHECK_MOZQUIC_ERR(mozquic_start_server(hrr6),
+                      "setup-start_server_ip6");
+
     auto i = 0;
     do {
-      mozquic_IO(connection);
+      mozquic_IO(connection_ip4);
+      mozquic_IO(connection_ip6);
+      mozquic_IO(hrr);
+      mozquic_IO(hrr6);
+      usleep(1000);
     } while(++i < 100);
 
-    std::cout << "server initialized - Listening on port " << config.originPort << " with fd = " << mozquic_osfd(connection) << std::endl;
+    std::cout << "file descriptors: \n" <<
+                 "ip4: " << mozquic_osfd(connection_ip4) << "\n" <<
+                 "ip6: " << mozquic_osfd(connection_ip6) << "\n" <<
+                 "hrr: " << mozquic_osfd(hrr) << "\n" <<
+                 "hrr6: " << mozquic_osfd(hrr6) << "\n" <<
+                 std::endl;
 
-    return mozquic_osfd(connection);
+    std::cout << "server initialized - Listening on port " <<
+                 config.originPort << " with fd = " <<
+                 mozquic_osfd(connection_ip6) << std::endl;
+
+    return mozquic_osfd(connection_ip6);
   }
 
-  void read_event(io::acceptor_base* base) override {
-    using namespace io::network;
-    std::cout << "read_event called" << std::endl;
-    int i = 0;
-    do {
-      mozquic_IO(connection);
-      usleep (1000);
-    } while(++i < 20 && !closure.new_connection);
-
-    // create newb with new connection
+  void accept_connection(accept_closure& closure, io::acceptor_base* base){
+    // create newb with new connection_ip4
     if(closure.new_connection) {
+      std::cout << "new connection fd: " << mozquic_osfd(closure.new_connection)
+      << std::endl;
       int fd = mozquic_osfd(closure.new_connection);
       transport_ptr transport{new quic_transport{closure.new_connection}};
       // transports.emplace_back(&transport); TODO: how to trigger actors?
@@ -179,6 +232,28 @@ public:
       std::cout << "new connection accepted." << std::endl;
       closure.new_connection = nullptr;
     }
+  }
+
+  void read_event(io::acceptor_base* base) override {
+    using namespace io::network;
+    std::cout << "read_event called" << std::endl;
+    int i = 0;
+    do {
+      mozquic_IO(connection_ip4);
+      mozquic_IO(connection_ip6);
+      mozquic_IO(hrr);
+      mozquic_IO(hrr6);
+      usleep (1000);
+    } while(++i < 100 &&
+            !closure_ip4.new_connection &&
+            !closure_ip6.new_connection &&
+            !closure_hrr.new_connection &&
+            !closure_hrr.new_connection);
+
+    accept_connection(closure_ip4, base);
+    accept_connection(closure_ip6, base);
+    accept_connection(closure_hrr, base);
+    accept_connection(closure_hrr6, base);
     std::cout << "read_event done" << std::endl;
     /*
     // check existing connections for incoming data
