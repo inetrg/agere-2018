@@ -94,12 +94,15 @@ private:
   accept_closure closure_ip6;
   accept_closure closure_hrr;
   accept_closure closure_hrr6;
-  // std::vector<transport_ptr*> transports; TODO: how to trigger actors?
+  std::vector<transport_ptr*> transports;
 
 public:
   accept_quic() : accept<Message>(true) {
     std::cout << "accept_quic()" << std::endl;
     connection_ip4 = nullptr;
+    connection_ip6 = nullptr;
+    hrr = nullptr;
+    hrr6 = nullptr;
   };
 
   ~accept_quic() override {
@@ -121,7 +124,7 @@ public:
       return io::network::invalid_native_socket;
     }
 
-    mozquic_config_t config;
+    mozquic_config_t config{};
     memset(&config, 0, sizeof(mozquic_config_t));
     config.originName = "foo.example.com";
     config.originPort = port;
@@ -169,7 +172,7 @@ public:
     // setting up the connection_ip4
     config.originPort = port + 1;
     config.ipv6 = 0;
-    mozquic_unstable_api1(&config, "forceAddressValidation", 1, 0);
+    mozquic_unstable_api1(&config, "forceAddressValidation", 1, nullptr);
     CHECK_MOZQUIC_ERR(mozquic_new_connection(&hrr, &config),
                       "setup-new_conn_ip6");
     CHECK_MOZQUIC_ERR(mozquic_set_event_callback(hrr, connectionCB_accept),
@@ -220,7 +223,7 @@ public:
       << std::endl;
       int fd = mozquic_osfd(closure.new_connection);
       transport_ptr transport{new quic_transport{closure.new_connection}};
-      // transports.emplace_back(&transport); TODO: how to trigger actors?
+      transports.emplace_back(&transport);
       auto en = base->create_newb(fd, std::move(transport));
       if (!en) {
         return;

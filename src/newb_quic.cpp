@@ -64,7 +64,7 @@ namespace policy {
 
 quic_transport::quic_transport(mozquic_connection_t* conn)
         : connection{conn},
-          closure(&send_buffer, &receive_buffer),
+          closure(),
           read_threshold{0},
           collected{0},
           maximum{0},
@@ -80,6 +80,9 @@ io::network::rw_state quic_transport::read_some
 (io::newb_base*) {
   std::cout << "read_some called" << std::endl;
   CAF_LOG_TRACE("");
+  closure.len = receive_buffer.size() - collected;
+  closure.receive_buffer = receive_buffer.data() + collected;
+  closure.amount_read = 0;
   int i = 0;
   while (++i < 20) {
     if (mozquic_IO(connection) != MOZQUIC_OK) {
@@ -87,14 +90,9 @@ io::network::rw_state quic_transport::read_some
       return io::network::rw_state::failure;
     }
   }
-  size_t result = (closure.amount_read > 0) ?
-          static_cast<size_t>(closure.amount_read) : 0;
+  size_t result = closure.amount_read;
   collected += result;
   received_bytes = collected;
-  if (received_bytes)
-    std::cout << "received data: " << closure.receive_buffer->data() <<
-    std::endl;
-
   std::cout << "read_some done" << std::endl;
   return io::network::rw_state::success;
 }
@@ -190,7 +188,6 @@ void quic_transport::flush(io::newb_base* parent) {
 expected<io::network::native_socket>
 quic_transport::connect(const std::string& host, uint16_t port,
                        optional<io::network::protocol::network>) {
-  setenv("MOZQUIC_LOG", "all:9", 0);
   std::cout << "connect called" << std::endl;
   std::cout << "host=" << host << " port=" << port << std::endl;
   // check for nss_config
@@ -228,8 +225,6 @@ quic_transport::connect(const std::string& host, uint16_t port,
                     "connect-callback closure_ip4");
   CHECK_MOZQUIC_ERR(mozquic_start_client(connection), "connect-start");
 
-  std::cout << closure.message << std::endl;
-
   uint32_t i=0;
   do {
     usleep (1000); // this is for handleio todo
@@ -240,17 +235,14 @@ quic_transport::connect(const std::string& host, uint16_t port,
     }
   } while (++i < 2000 && !closure.connected);
 
-  std::cout << closure.message << std::endl;
-
-  std::cout << "connect done" << std::endl;
-  std::cout << "closure.connected=" << ((closure.connected) ? "true" : "false") << std::endl;
-  if (!closure.connected)
+  if (!closure.connected) {
+    std::cout << "connect didnt work." << std::endl;
     return io::network::invalid_native_socket;
-  else {
+  } else {
     // switch to transport callback to receive data later on
     mozquic_set_event_callback(&connection, connectionCB_transport);
     auto fd = mozquic_osfd(connection);
-    std::cout << "" << std::endl;
+    std::cout << "connect worked! fd = " << fd << std::endl;
     return fd;
   }
 }

@@ -14,20 +14,17 @@ int connectionCB_connect(void *closure, uint32_t event, void *param);
 
 
 struct transport_closure {
-  transport_closure(caf::policy::byte_buffer* wr_buf, caf::policy::byte_buffer*
-                    rec_buf) :
+  transport_closure() :
           connected{false},
+          len{0},
           amount_read{0},
-          write_buffer{wr_buf},
-          receive_buffer{rec_buf},
-          message(""){
+          receive_buffer{nullptr}{
   };
 
   bool connected;
-  int amount_read;
-  caf::policy::byte_buffer* write_buffer;
-  caf::policy::byte_buffer* receive_buffer;
-  std::string message;
+  size_t len;
+  size_t amount_read;
+  void* receive_buffer;
 };
 
 struct accept_closure {
