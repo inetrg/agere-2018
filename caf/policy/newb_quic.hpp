@@ -258,11 +258,12 @@ public:
     accept_connection(closure_hrr, base);
     accept_connection(closure_hrr6, base);
     std::cout << "read_event done" << std::endl;
-    /*
+
     // check existing connections for incoming data
+    // TODO is this valid? pointer to unique_ptr?!
     for (auto& trans : transports) {
       (*trans)->read_some(base);
-    }*/
+    }
   }
 
   std::pair<io::network::native_socket, transport_ptr>
