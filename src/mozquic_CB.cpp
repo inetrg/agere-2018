@@ -72,9 +72,11 @@ int connectionCB_accept(void* closure, uint32_t event, void* param) {
 int connectionCB_connect(void* closure, uint32_t event, void*) {
   auto clo = static_cast<transport_closure*>(closure);
   switch (event) {
-    case MOZQUIC_EVENT_CONNECTED:
     case MOZQUIC_EVENT_0RTT_POSSIBLE:
-      clo->connected = true;
+      std::cout << "0RTT possible" << std::endl;
+      break;
+    case MOZQUIC_EVENT_CONNECTED:
+      std::cout << "client connected" << std::endl;
       break;
 
     default:

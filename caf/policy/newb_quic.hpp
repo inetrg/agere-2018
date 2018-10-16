@@ -33,7 +33,7 @@ namespace caf {
 namespace policy {
 
 static const char* NSS_CONFIG_PATH =
-        "/home/boss/CLionProjects/agere-2018/nss-config/";
+        "/home/jakob/CLionProjects/agere-2018/nss-config/";
 
 struct quic_transport : public transport {
 private:
@@ -94,7 +94,7 @@ private:
   accept_closure closure_ip6;
   accept_closure closure_hrr;
   accept_closure closure_hrr6;
-  std::vector<transport_ptr*> transports;
+  std::vector<quic_transport*> transports;
 
 public:
   accept_quic() : accept<Message>(true) {
@@ -143,18 +143,8 @@ public:
                                             nullptr), "setup-streamWindow");
     CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "connWindow", 8192, nullptr),
                       "setup-connWindow");
-    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 0, nullptr),
+    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr),
                       "setup-0rtt");
-
-    // setting up the connection_ip4
-    CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection_ip4, &config),
-                      "setup-new_conn_ip6");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection_ip4, connectionCB_accept),
-                      "setup-event_cb_ip6");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection_ip4, &closure_ip4),
-                      "setup-event_cb_closure");
-    CHECK_MOZQUIC_ERR(mozquic_start_server(connection_ip4),
-                      "setup-start_server_ip6");
 
     // setting up the connection_ip4
     config.ipv6 = 1;
@@ -169,45 +159,11 @@ public:
     CHECK_MOZQUIC_ERR(mozquic_start_server(connection_ip6),
                       "setup-start_server_ip6");
 
-    // setting up the connection_ip4
-    config.originPort = port + 1;
-    config.ipv6 = 0;
-    mozquic_unstable_api1(&config, "forceAddressValidation", 1, nullptr);
-    CHECK_MOZQUIC_ERR(mozquic_new_connection(&hrr, &config),
-                      "setup-new_conn_ip6");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(hrr, connectionCB_accept),
-                      "setup-event_cb_ip6");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(hrr, &closure_hrr),
-                      "setup-event_cb_closure");
-    CHECK_MOZQUIC_ERR(mozquic_start_server(hrr),
-                      "setup-start_server_ip6");
-
-    // setting up the connection_ip4
-    config.ipv6 = 1;
-    CHECK_MOZQUIC_ERR(mozquic_new_connection(&hrr6, &config),
-                      "setup-new_conn_ip6");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(hrr6, connectionCB_accept),
-                      "setup-event_cb_ip6");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(hrr6, &closure_hrr6),
-                      "setup-event_cb_closure");
-    CHECK_MOZQUIC_ERR(mozquic_start_server(hrr6),
-                      "setup-start_server_ip6");
-
     auto i = 0;
     do {
-      mozquic_IO(connection_ip4);
       mozquic_IO(connection_ip6);
-      mozquic_IO(hrr);
-      mozquic_IO(hrr6);
       usleep(1000);
     } while(++i < 100);
-
-    std::cout << "file descriptors: \n" <<
-                 "ip4: " << mozquic_osfd(connection_ip4) << "\n" <<
-                 "ip6: " << mozquic_osfd(connection_ip6) << "\n" <<
-                 "hrr: " << mozquic_osfd(hrr) << "\n" <<
-                 "hrr6: " << mozquic_osfd(hrr6) << "\n" <<
-                 std::endl;
 
     std::cout << "server initialized - Listening on port " <<
                  config.originPort << " with fd = " <<
@@ -216,17 +172,18 @@ public:
     return mozquic_osfd(connection_ip6);
   }
 
-  void accept_connection(accept_closure& closure, io::acceptor_base* base){
+  bool accept_connection(accept_closure& closure, io::acceptor_base* base){
     // create newb with new connection_ip4
     if(closure.new_connection) {
       std::cout << "new connection fd: " << mozquic_osfd(closure.new_connection)
       << std::endl;
       int fd = mozquic_osfd(closure.new_connection);
-      transport_ptr transport{new quic_transport{closure.new_connection}};
-      transports.emplace_back(&transport);
+      auto trans = new quic_transport{closure.new_connection};
+      transport_ptr transport{trans};
+      transports.emplace_back(trans);
       auto en = base->create_newb(fd, std::move(transport));
       if (!en) {
-        return;
+        return false;
       }
       auto ptr = caf::actor_cast<caf::abstract_actor*>(*en);
       CAF_ASSERT(ptr != nullptr);
@@ -234,7 +191,9 @@ public:
       init(base, ref);
       std::cout << "new connection accepted." << std::endl;
       closure.new_connection = nullptr;
+      return true;
     }
+    return false;
   }
 
   void read_event(io::acceptor_base* base) override {
@@ -242,28 +201,20 @@ public:
     std::cout << "read_event called" << std::endl;
     int i = 0;
     do {
-      mozquic_IO(connection_ip4);
       mozquic_IO(connection_ip6);
-      mozquic_IO(hrr);
-      mozquic_IO(hrr6);
       usleep (1000);
-    } while(++i < 100 &&
-            !closure_ip4.new_connection &&
-            !closure_ip6.new_connection &&
-            !closure_hrr.new_connection &&
-            !closure_hrr.new_connection);
+    } while(++i < 2000);
 
-    accept_connection(closure_ip4, base);
-    accept_connection(closure_ip6, base);
-    accept_connection(closure_hrr, base);
-    accept_connection(closure_hrr6, base);
-    std::cout << "read_event done" << std::endl;
+    if (accept_connection(closure_ip6, base)) {
+      std::cout << "read_event done" << std::endl;
+      return;
+    }
 
     // check existing connections for incoming data
-    // TODO is this valid? pointer to unique_ptr?!
-    for (auto& trans : transports) {
-      (*trans)->read_some(base);
+    for (auto trans : transports) {
+      trans->read_some(base);
     }
+    std::cout << "read_event done" << std::endl;
   }
 
   std::pair<io::network::native_socket, transport_ptr>

@@ -72,8 +72,13 @@ quic_transport::quic_transport(mozquic_connection_t* conn)
           writing{false},
           written{0} {
   std::cout << "quic_transport()" << std::endl;
-  if(conn)
+  if (conn) {
     mozquic_set_event_callback_closure(conn, &closure);
+    for(int i = 0; i < 5; ++i) {
+      mozquic_IO(conn);
+      usleep(1000);
+    }
+  }
 }
 
 io::network::rw_state quic_transport::read_some
@@ -217,7 +222,7 @@ quic_transport::connect(const std::string& host, uint16_t port,
                     "connect-noTransportParams");
   CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "maxSizeAllowed", 1452,
                                           nullptr), "connect-maxSize");
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 0, nullptr),
+  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr),
                     "connect-0rtt");
 
   CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection, &config),
