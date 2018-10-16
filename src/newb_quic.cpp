@@ -79,6 +79,8 @@ quic_transport::quic_transport(mozquic_connection_t* conn)
 io::network::rw_state quic_transport::read_some
 (io::newb_base*) {
   std::cout << "read_some called" << std::endl;
+  // in case some data was just sent
+  mozquic_set_event_callback(&connection, connectionCB_transport);
   CAF_LOG_TRACE("");
   closure.len = receive_buffer.size() - collected;
   closure.receive_buffer = receive_buffer.data() + collected;
@@ -137,6 +139,8 @@ void quic_transport::configure_read(io::receive_policy::config config) {
 
 io::network::rw_state quic_transport::write_some(io::newb_base*
 parent) {
+  // in case last action was receiving data
+  mozquic_set_event_callback(&connection, connectionCB_send);
   std::cout << "write_some called" << std::endl;
   CAF_LOG_TRACE("");
   mozquic_stream_t* stream;

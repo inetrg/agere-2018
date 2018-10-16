@@ -11,7 +11,7 @@
 int connectionCB_accept(void *closure, uint32_t event, void *param);
 int connectionCB_transport(void *closure, uint32_t event, void *param);
 int connectionCB_connect(void *closure, uint32_t event, void *param);
-
+int connectionCB_send(void* closure, uint32_t event, void* param);
 
 struct transport_closure {
   transport_closure() :

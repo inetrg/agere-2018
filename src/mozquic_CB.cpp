@@ -40,6 +40,15 @@ int connectionCB_transport(void* closure, uint32_t event, void* param) {
   return MOZQUIC_OK;
 }
 
+// doesnt do anything. needed to interrupt receiving data, while triggering IO!
+int connectionCB_send(void*, uint32_t event, void* param) {
+  if(event == MOZQUIC_EVENT_ERROR ||
+     event == MOZQUIC_EVENT_CLOSE_CONNECTION)
+    return mozquic_destroy_connection(param);
+
+  return MOZQUIC_OK;
+}
+
 int connectionCB_accept(void* closure, uint32_t event, void* param) {
   auto clo = static_cast<accept_closure*>(closure);
   switch (event) {
