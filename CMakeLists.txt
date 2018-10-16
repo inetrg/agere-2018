@@ -73,7 +73,7 @@ if (NOT MOZQUIC_ROOT_DIR)
 endif ()
   find_package(Mozquic)
 if (MOZQUIC_FOUND)
-  include_directories(${MOZQUC_INCLUDE_DIRS})
+  include_directories(${MOZQUIC_INCLUDE_DIRS})
 else ()
   message(FATAL_ERROR "Could not find Mozquic!")
 endif ()
@@ -118,10 +118,6 @@ macro(add folder name)
   target_link_libraries(${name} ${CMAKE_THREAD_LIBS_INIT})
 endmacro()
 
-#add(src one_raw_udp)
-#add(src one_raw_tcp)
-#add(src one_basp_udp)
-#add(src one_basp_tcp)
 add(src layers)
 add(src pingpong_udp)
 add(src pingpong_tcp)
@@ -143,6 +139,8 @@ target_link_libraries(
         ${BENCHMARK_LIBRARIES}
         ${NSS_LIBRARIES}
         ${NSPR_LIBRARIES}
-        ${MOZQUIC_LIBRARIES})
+        ${MOZQUIC_LIBRARIES}
+        -lstdc++
+)
 
 add_dependencies(pingpong_quic newb_measurements)

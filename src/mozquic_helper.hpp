@@ -2,7 +2,7 @@
 // Created by boss on 8/11/18.
 //
 #include <iostream>
-#include "../caf/policy/MozQuic.h"
+#include "MozQuic.h"
 
 #ifndef MOZQUIC_EXAMPLE_MOZQUIC_HELPER_H
 #define MOZQUIC_EXAMPLE_MOZQUIC_HELPER_H

@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "../caf/policy/MozQuic.h"
+#include "MozQuic.h"
 #include "caf/policy/transport.hpp"
 #include <cstdint>
 
