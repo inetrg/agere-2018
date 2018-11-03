@@ -14,17 +14,10 @@ int connectionCB_connect(void *closure, uint32_t event, void *param);
 int connectionCB_send(void* closure, uint32_t event, void* param);
 
 struct transport_closure {
-  transport_closure() :
-          connected{false},
-          len{0},
-          amount_read{0},
-          receive_buffer{nullptr}{
-  };
-
-  bool connected;
-  size_t len;
-  size_t amount_read;
-  void* receive_buffer;
+  bool connected = false;
+  size_t len = 0;
+  size_t amount_read = 0;
+  void* receive_buffer = nullptr;
 };
 
 struct accept_closure {

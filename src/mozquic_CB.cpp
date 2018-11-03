@@ -11,6 +11,10 @@ int connectionCB_transport(void* closure, uint32_t event, void* param) {
   switch (event) {
     // receive data from stream
     case MOZQUIC_EVENT_NEW_STREAM_DATA: {
+      if (!clo) {
+        std::cout << "closure was null" << std::endl;
+        break;
+      }
       mozquic_stream_t* stream = param;
       if (mozquic_get_streamid(stream) & 0x3)
         break;
@@ -31,7 +35,6 @@ int connectionCB_transport(void* closure, uint32_t event, void* param) {
 
     case MOZQUIC_EVENT_CLOSE_CONNECTION:
     case MOZQUIC_EVENT_ERROR:
-      clo->connected = false;
       return mozquic_destroy_connection(param);
 
     default:
@@ -74,13 +77,12 @@ int connectionCB_connect(void* closure, uint32_t event, void*) {
   switch (event) {
     case MOZQUIC_EVENT_0RTT_POSSIBLE:
       std::cout << "0RTT possible" << std::endl;
-      break;
     case MOZQUIC_EVENT_CONNECTED:
       std::cout << "client connected" << std::endl;
+      clo->connected = true;
       break;
 
     default:
-      clo->connected = false;
       break;
   }
   return MOZQUIC_OK;

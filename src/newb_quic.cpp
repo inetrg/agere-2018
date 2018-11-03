@@ -62,34 +62,15 @@
 namespace caf {
 namespace policy {
 
-quic_transport::quic_transport(mozquic_connection_t* conn)
-        : connection{conn},
-          closure(),
-          read_threshold{0},
-          collected{0},
-          maximum{0},
-          rd_flag{io::receive_policy_flag::exactly},
-          writing{false},
-          written{0} {
-  std::cout << "quic_transport()" << std::endl;
-  if (conn) {
-    mozquic_set_event_callback_closure(conn, &closure);
-    for(int i = 0; i < 5; ++i) {
-      mozquic_IO(conn);
-      usleep(1000);
-    }
-  }
-}
-
 io::network::rw_state quic_transport::read_some
 (io::newb_base*) {
   std::cout << "read_some called" << std::endl;
   // in case some data was just sent
   mozquic_set_event_callback(&connection, connectionCB_transport);
   CAF_LOG_TRACE("");
-  closure.len = receive_buffer.size() - collected;
-  closure.receive_buffer = receive_buffer.data() + collected;
-  closure.amount_read = 0;
+  closure->len = receive_buffer.size() - collected;
+  closure->receive_buffer = receive_buffer.data() + collected;
+  closure->amount_read = 0;
   int i = 0;
   while (++i < 20) {
     if (mozquic_IO(connection) != MOZQUIC_OK) {
@@ -97,7 +78,7 @@ io::network::rw_state quic_transport::read_some
       return io::network::rw_state::failure;
     }
   }
-  size_t result = closure.amount_read;
+  size_t result = closure->amount_read;
   collected += result;
   received_bytes = collected;
   std::cout << "read_some done" << std::endl;
@@ -228,9 +209,8 @@ quic_transport::connect(const std::string& host, uint16_t port,
   CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection, &config),
                     "connect-new_conn");
   CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection,
-          connectionCB_connect),
-                    "connect-callback");
-  CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection, &closure),
+          connectionCB_connect), "connect-callback");
+  CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection, closure),
                     "connect-callback closure_ip4");
   CHECK_MOZQUIC_ERR(mozquic_start_client(connection), "connect-start");
 
@@ -242,19 +222,21 @@ quic_transport::connect(const std::string& host, uint16_t port,
       std::cerr << "connect: retcode != MOZQUIC_OK!!" << std::endl;
       break;
     }
-  } while (++i < 2000 && !closure.connected);
+  } while (++i < 2000 && !closure->connected);
 
-  if (!closure.connected) {
+  if (!closure->connected) {
     std::cout << "connect didnt work." << std::endl;
     return io::network::invalid_native_socket;
   } else {
     // switch to transport callback to receive data later on
     mozquic_set_event_callback(&connection, connectionCB_transport);
+    mozquic_set_event_callback_closure(connection, closure);
     auto fd = mozquic_osfd(connection);
     std::cout << "connect worked! fd = " << fd << std::endl;
     return fd;
   }
 }
+
 
 } // namespace policy
 } // namespace caf
