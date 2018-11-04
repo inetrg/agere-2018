@@ -39,12 +39,12 @@ struct quic_transport : public transport {
 private:
   // connection_ip4 state
   mozquic_connection_t* connection;
-  transport_closure* closure;
+  transport_closure closure;
 
 public:
-  explicit quic_transport(mozquic_connection_t* conn = nullptr)
+  explicit quic_transport(mozquic_connection_t* conn)
     : connection{conn},
-      closure{new transport_closure},
+      closure{},
       read_threshold{0},
       collected{0},
       maximum{0},
@@ -54,17 +54,14 @@ public:
     std::cout << "quic_transport()" << std::endl;
     if (conn) {
       mozquic_set_event_callback(connection, connectionCB_transport);
-      mozquic_set_event_callback_closure(conn, closure);
-      for(int i = 0; i < 5; ++i) {
-        mozquic_IO(conn);
-        usleep(1000);
-      }
+      mozquic_set_event_callback_closure(conn, &closure);
     }
   }
 
+  quic_transport() : quic_transport(nullptr) {};
+
   ~quic_transport() override {
     std::cout << "~quic_transport()" << std::endl;
-    if (closure) delete closure;
     if (connection) {
       mozquic_shutdown_connection(connection);
       mozquic_destroy_connection(connection);

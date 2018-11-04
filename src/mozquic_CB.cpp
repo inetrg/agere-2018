@@ -77,6 +77,7 @@ int connectionCB_connect(void* closure, uint32_t event, void*) {
   switch (event) {
     case MOZQUIC_EVENT_0RTT_POSSIBLE:
       std::cout << "0RTT possible" << std::endl;
+      [[clang::fallthrough]];
     case MOZQUIC_EVENT_CONNECTED:
       std::cout << "client connected" << std::endl;
       clo->connected = true;
