@@ -219,7 +219,6 @@ public:
       std::cout << "trans" << std::endl;
       auto& ref = dynamic_cast<io::newb<Message> &>(*ptr);
       ref.read_event();
-      ref.write_event();
     }
 
     // trigger IO some more after read/write
@@ -230,6 +229,15 @@ public:
     } while(++i < 200);
 
     std::cout << "read_event done" << std::endl;
+  }
+
+  error write_event(io::acceptor_base*) override {
+    for (auto ptr : newbs) {
+      std::cout << "trans" << std::endl;
+      auto& ref = dynamic_cast<io::newb<Message> &>(*ptr);
+      ref.write_event();
+    }
+    return none;
   }
 
   std::pair<io::network::native_socket, transport_ptr>
