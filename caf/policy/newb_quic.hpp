@@ -19,6 +19,7 @@
 #pragma once
 
 #include <zconf.h>
+#include <set>
 #include "caf/io/newb.hpp"
 #include "caf/config.hpp"
 #include "caf/io/network/default_multiplexer.hpp"
@@ -57,8 +58,6 @@ public:
   }
   quic_transport(mozquic_stream_t* stream) : quic_transport(nullptr, stream) {};
   quic_transport() : quic_transport(nullptr, nullptr) {};
-
-
 
   ~quic_transport() override {
     std::cout << "~quic_transport()" << std::endl;
@@ -104,6 +103,7 @@ private:
   // connection_ip4 state
   mozquic_connection_t* connection;
   mozquic_closure closure;
+  std::set<mozquic_stream_t*> streams;
   std::vector<quic_transport*> transports;
 
 public:
@@ -183,21 +183,18 @@ public:
 
   void accept_connection(io::acceptor_base* base) {
     // create newb with new connection
-    std::vector<mozquic_stream_t*> unnaccepted;
-    for (auto& stream : closure.new_streams) {
+    for (auto stream : closure.new_streams) {
+      if(streams.find(stream) != streams.end()) continue;
       int fd = mozquic_osfd(connection);
-      auto trans = new quic_transport{stream};
+      auto trans = new quic_transport(stream);
       transport_ptr transport{trans};
       transports.emplace_back(trans);
       auto en = base->create_newb(fd, std::move(transport));
-      if (!en) {
-        //unnaccepted.emplace_back(stream);
-        continue;
-      }
       auto ptr = caf::actor_cast<caf::abstract_actor *>(*en);
       CAF_ASSERT(ptr != nullptr);
       auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
       init(base, ref);
+      streams.insert(stream);
       std::cout << "new connection accepted." << std::endl;
     }
     // this should clear all accepted streams and keep all unnaccepted ones.

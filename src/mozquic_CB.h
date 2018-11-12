@@ -12,6 +12,6 @@ int connectionCB(void* closure, uint32_t event, void* param);
 int connectionCB_connect(void *closure, uint32_t event, void *param);
 
 struct mozquic_closure {
-  std::vector<mozquic_stream_t*> new_streams;
+  std::set<mozquic_stream_t*> new_streams;
   bool connected = false;
 };
