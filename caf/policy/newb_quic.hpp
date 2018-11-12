@@ -38,32 +38,33 @@ static const char* NSS_CONFIG_PATH =
 
 struct quic_transport : public transport {
 private:
-  // connection state
-  mozquic_connection_t* connection;
+  // connection_transport_pol state
+  mozquic_connection_t* connection_transport_pol;
   mozquic_stream_t* stream;
   mozquic_closure closure;
 
 public:
-  explicit quic_transport(mozquic_connection_t* conn, mozquic_stream_t* stream)
-    : connection{conn},
+  quic_transport(mozquic_connection_t* conn, mozquic_stream_t* stream)
+    : connection_transport_pol{conn},
       stream{stream},
       closure{},
-      read_threshold{0},
+      read_threshold{1},
       collected{0},
       maximum{0},
       rd_flag{io::receive_policy_flag::exactly},
       writing{false},
       written{0} {
+    configure_read(io::receive_policy::at_most(1024));
     std::cout << "quic_transport()" << std::endl;
   }
-  quic_transport(mozquic_stream_t* stream) : quic_transport(nullptr, stream) {};
+  explicit quic_transport(mozquic_stream_t* stream) : quic_transport(nullptr, stream) {};
   quic_transport() : quic_transport(nullptr, nullptr) {};
 
   ~quic_transport() override {
     std::cout << "~quic_transport()" << std::endl;
-    if (connection) {
-      mozquic_shutdown_connection(connection);
-      mozquic_destroy_connection(connection);
+    if (connection_transport_pol) {
+      mozquic_shutdown_connection(connection_transport_pol);
+      mozquic_destroy_connection(connection_transport_pol);
     }
   }
 
@@ -101,24 +102,24 @@ template <class Message>
 struct accept_quic : public accept<Message> {
 private:
   // connection_ip4 state
-  mozquic_connection_t* connection;
   mozquic_closure closure;
+  mozquic_connection_t* connection_accept_pol;
   std::set<mozquic_stream_t*> streams;
-  std::vector<quic_transport*> transports;
+  std::vector<caf::abstract_actor*> newbs;
 
 public:
   accept_quic() : accept<Message>(true) {
     std::cout << "accept_quic()" << std::endl;
-    connection = nullptr;
+    connection_accept_pol = nullptr;
   };
 
   ~accept_quic() override {
     // destroy all pending connections
     std::cout << "~accept_quic()" << std::endl;
     // nullcheck mozquic_functions aren't nullsafe!
-    if (connection) {
-      mozquic_shutdown_connection(connection);
-      mozquic_destroy_connection(connection);
+    if (connection_accept_pol) {
+      mozquic_shutdown_connection(connection_accept_pol);
+      mozquic_destroy_connection(connection_accept_pol);
     }
   }
 
@@ -154,50 +155,49 @@ public:
     CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr),
                       "setup-0rtt");
 
-    // setting up the connection
+    // setting up the connection_transport_pol
     config.ipv6 = 1;
 
-    CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection, &config),
+    CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection_accept_pol, &config),
                       "setup-new_conn");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection,
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection_accept_pol,
                                                  connectionCB),
                       "setup-event_cb");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection,
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection_accept_pol,
                                                          &closure),
                       "setup-event_cb_closure");
-    CHECK_MOZQUIC_ERR(mozquic_start_server(connection),
+    CHECK_MOZQUIC_ERR(mozquic_start_server(connection_accept_pol),
                       "setup-start_server");
 
     auto i = 0;
     do {
-      mozquic_IO(connection);
+      mozquic_IO(connection_accept_pol);
       usleep(1000);
     } while(++i < 100);
 
     std::cout << "server initialized - Listening on port " <<
               config.originPort << " with fd = " <<
-              mozquic_osfd(connection) << std::endl;
+              mozquic_osfd(connection_accept_pol) << "\n"
+              << connection_accept_pol << std::endl;
 
-    return mozquic_osfd(connection);
+    return mozquic_osfd(connection_accept_pol);
   }
 
   void accept_connection(io::acceptor_base* base) {
-    // create newb with new connection
+    // create newb with new connection_transport_pol
     for (auto stream : closure.new_streams) {
       if(streams.find(stream) != streams.end()) continue;
-      int fd = mozquic_osfd(connection);
-      auto trans = new quic_transport(stream);
-      transport_ptr transport{trans};
-      transports.emplace_back(trans);
+      int fd = mozquic_osfd(connection_accept_pol);
+      transport_ptr transport{new quic_transport(stream)};
       auto en = base->create_newb(fd, std::move(transport));
       auto ptr = caf::actor_cast<caf::abstract_actor *>(*en);
       CAF_ASSERT(ptr != nullptr);
       auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
+      newbs.emplace_back(ptr);
       init(base, ref);
       streams.insert(stream);
-      std::cout << "new connection accepted." << std::endl;
+      std::cout << "new connection_transport_pol accepted." << std::endl;
     }
-    // this should clear all accepted streams and keep all unnaccepted ones.
     closure.new_streams.clear();
   }
 
@@ -206,7 +206,7 @@ public:
     std::cout << "read_event called" << std::endl;
     int i = 0;
     do {
-      mozquic_IO(connection);
+      mozquic_IO(connection_accept_pol);
       usleep (1000);
     } while(++i < 200);
 
@@ -215,16 +215,17 @@ public:
 
     std::cout << "checking transports" << std::endl;
     // check existing connections for incoming data
-    for (auto trans : transports) {
+    for (auto ptr : newbs) {
       std::cout << "trans" << std::endl;
-      trans->read_some(base);
-      trans->write_some(base);
+      auto& ref = dynamic_cast<io::newb<Message> &>(*ptr);
+      ref.read_event();
+      ref.write_event();
     }
 
     // trigger IO some more after read/write
     i = 0;
     do {
-      mozquic_IO(connection);
+      mozquic_IO(connection_accept_pol);
       usleep (1000);
     } while(++i < 200);
 

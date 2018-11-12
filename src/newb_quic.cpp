@@ -69,15 +69,16 @@ io::network::rw_state quic_transport::read_some
 (io::newb_base*) {
   cout << "read_some called" << endl;
   CAF_LOG_TRACE("");
+  receive_buffer.resize(10);
   auto len = receive_buffer.size() - collected;
   void* buf = receive_buffer.data() + collected;
   uint32_t sres = 0;
   auto fin = 0;
 
-  // trigger connection to get incoming data for recv
+  // trigger connection_accept_pol to get incoming data for recv
   int i = 0;
-  while (++i < 20 && connection) {
-    mozquic_IO(connection);
+  while (++i < 20 && connection_transport_pol) {
+    mozquic_IO(connection_transport_pol);
     usleep(1000);
   }
 
@@ -86,6 +87,15 @@ io::network::rw_state quic_transport::read_some
                            static_cast<uint32_t>(len),
                            &sres,
                            &fin);
+
+  if(sres != 0) {
+    cout << "RECEIVED DATA: ";
+    for(uint32_t i = 0; i < sres/sizeof(uint32_t); ++i) {
+      std::cout << ((uint32_t*)buf)[i];
+    }
+    std::cout << std::endl;
+  }
+
   if (code != MOZQUIC_OK) {
     CAF_LOG_DEBUG("recv failed" << CAF_ARG(sres));
     return io::network::rw_state::failure;
@@ -144,19 +154,21 @@ parent) {
   // in case last action was receiving data
   cout << "write_some called" << endl;
   CAF_LOG_TRACE("");
-  const void* buf = send_buffer.data();
-  int res = mozquic_send(stream, const_cast<void*>(buf),
-          static_cast<uint32_t>(send_buffer.size()), 0);
+  void* buf = send_buffer.data() + written;
+  auto len = send_buffer.size() - written;
+  int res = mozquic_send(stream, buf,
+          static_cast<uint32_t>(len), 0);
   if (res != MOZQUIC_OK) {
     CAF_LOG_ERROR("send failed");
     return io::network::rw_state::failure;
   }
   // trigger IO so data will be passed through
   int i = 0;
-  while (++i < 20 && connection) {
-    mozquic_IO(connection);
+  while (++i < 20 && connection_transport_pol) {
+    mozquic_IO(connection_transport_pol);
     usleep(1000);
   }
+  written += len;
   auto remaining = send_buffer.size() - written;
   if (remaining == 0)
     prepare_next_write(parent);
@@ -221,18 +233,18 @@ quic_transport::connect(const std::string& host, uint16_t port,
   CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr),
                     "connect-0rtt");
 
-  CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection, &config),
+  CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection_transport_pol, &config),
                     "connect-new_conn");
-  CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection,
+  CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection_transport_pol,
           connectionCB_connect), "connect-callback");
-  CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection, &closure),
+  CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection_transport_pol, &closure),
                     "connect-callback closure_ip4");
-  CHECK_MOZQUIC_ERR(mozquic_start_client(connection), "connect-start");
+  CHECK_MOZQUIC_ERR(mozquic_start_client(connection_transport_pol), "connect-start");
 
   uint32_t i=0;
   do {
     usleep (1000); // this is for handleio todo
-    auto code = mozquic_IO(connection);
+    auto code = mozquic_IO(connection_transport_pol);
     if (code != MOZQUIC_OK) {
       std::cerr << "connect: retcode != MOZQUIC_OK!!" << endl;
       break;
@@ -241,14 +253,15 @@ quic_transport::connect(const std::string& host, uint16_t port,
 
   if (!closure.connected) {
     cout << "connect didnt work." << endl;
-    return io::network::invalid_native_socket;;
+    return io::network::invalid_native_socket;
   }
 
   // start new stream for this transport.
-  mozquic_start_new_stream(&stream, connection, 0, 0, const_cast<char*>(""), 0, 0);
+  mozquic_start_new_stream(&stream, connection_transport_pol, 0, 0, const_cast<char*>(""), 0, 0);
 
-  auto sock = mozquic_osfd(connection);
-  cout << "connect worked! fd = " << sock << endl;
+  auto sock = mozquic_osfd(connection_transport_pol);
+
+  cout << "connect worked! fd = " << sock << "\n" << connection_transport_pol << endl;
   return sock;
 }
 

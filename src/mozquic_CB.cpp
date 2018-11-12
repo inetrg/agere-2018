@@ -6,7 +6,6 @@
 
 int connectionCB(void* closure, uint32_t event, void* param) {
   auto clo = static_cast<mozquic_closure*>(closure);
-  std::cout << "connectionCB called" << std::endl;
   switch (event) {
     // save new stream for
     case MOZQUIC_EVENT_NEW_STREAM_DATA:
