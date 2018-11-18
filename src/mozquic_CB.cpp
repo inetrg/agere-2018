@@ -3,6 +3,7 @@
 //
 
 #include "mozquic_CB.h"
+#include <zconf.h>
 
 int connectionCB(void* closure, uint32_t event, void* param) {
   auto clo = static_cast<mozquic_closure*>(closure);

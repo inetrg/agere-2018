@@ -67,56 +67,39 @@ namespace policy {
 
 io::network::rw_state quic_transport::read_some
 (io::newb_base*) {
-  cout << "read_some called" << endl;
   CAF_LOG_TRACE("");
   receive_buffer.resize(10);
   auto len = receive_buffer.size() - collected;
   void* buf = receive_buffer.data() + collected;
   uint32_t sres = 0;
   auto fin = 0;
-
   // trigger connection_accept_pol to get incoming data for recv
-  int i = 0;
-  while (++i < 20 && connection_transport_pol) {
-    mozquic_IO(connection_transport_pol);
-    usleep(1000);
+  auto res = trigger_mozquic_IO(connection_transport_pol);
+  if (res != MOZQUIC_OK) {
+    CAF_LOG_ERROR("recv failed");
+    return io::network::rw_state::failure;
   }
-
   auto code = mozquic_recv(stream,
                            buf,
                            static_cast<uint32_t>(len),
                            &sres,
                            &fin);
-
-  if(sres != 0) {
-    cout << "RECEIVED DATA: ";
-    for(uint32_t i = 0; i < sres/sizeof(uint32_t); ++i) {
-      std::cout << ((uint32_t*)buf)[i];
-    }
-    std::cout << std::endl;
-  }
-
   if (code != MOZQUIC_OK) {
     CAF_LOG_DEBUG("recv failed" << CAF_ARG(sres));
     return io::network::rw_state::failure;
   }
-
   auto result = static_cast<size_t>(sres);
   collected += result;
   received_bytes = collected;
-
-  cout << "read_some done" << endl;
   return io::network::rw_state::success;
 }
 
 bool quic_transport::should_deliver() {
-  cout << "should_deliver called" << endl;
   CAF_LOG_DEBUG(CAF_ARG(collected) << CAF_ARG(read_threshold));
   return collected >= read_threshold;
 }
 
 void quic_transport::prepare_next_read(io::newb_base*) {
-  cout << "prepare_next_read called" << endl;
   collected = 0;
   received_bytes = 0;
   switch (rd_flag) {
@@ -139,21 +122,18 @@ void quic_transport::prepare_next_read(io::newb_base*) {
       break;
     }
   }
-  cout << "prepare_next_read done" << endl;
 }
 
 void quic_transport::configure_read(io::receive_policy::config config) {
-  cout << "configure_read called" << endl;
   rd_flag = config.first;
   maximum = config.second;
-  cout << "configure_read done" << endl;
 }
 
 io::network::rw_state quic_transport::write_some(io::newb_base*
 parent) {
-  // in case last action was receiving data
-  cout << "write_some called" << endl;
   CAF_LOG_TRACE("");
+  // dont't write if nothing here to write.
+  if(!writing) return io::network::rw_state::success;
   void* buf = send_buffer.data() + written;
   auto len = send_buffer.size() - written;
   int res = mozquic_send(stream, buf,
@@ -163,53 +143,52 @@ parent) {
     return io::network::rw_state::failure;
   }
   // trigger IO so data will be passed through
-  int i = 0;
-  while (++i < 20 && connection_transport_pol) {
-    mozquic_IO(connection_transport_pol);
-    usleep(1000);
+  res = trigger_mozquic_IO(connection_transport_pol);
+  if (res != MOZQUIC_OK) {
+    CAF_LOG_ERROR("send failed");
+    return io::network::rw_state::failure;
   }
   written += len;
   auto remaining = send_buffer.size() - written;
   if (remaining == 0)
     prepare_next_write(parent);
-  cout << "write_some done" << endl;
   return io::network::rw_state::success;
 }
 
 void quic_transport::prepare_next_write(io::newb_base* parent) {
-  cout << "prepare_next_write called" << endl;
   written = 0;
   send_buffer.clear();
   if (offline_buffer.empty()) {
-    parent->stop_writing();
+    if(!acceptor) {
+      parent->stop_writing();
+    }
     writing = false;
   } else {
     send_buffer.swap(offline_buffer);
   }
-  cout << "prepare_next_write done" << endl;
 }
 
 void quic_transport::flush(io::newb_base* parent) {
-  cout << "flush called" << endl;
   CAF_ASSERT(parent != nullptr);
   CAF_LOG_TRACE(CAF_ARG(offline_buffer.size()));
   if (!offline_buffer.empty() && !writing) {
-    parent->start_writing();
+    if(acceptor) {
+      acceptor->start_writing();
+    } else {
+      parent->start_writing();
+    }
     writing = true;
     prepare_next_write(parent);
   }
-  cout << "flush done" << endl;
 }
 
 
 expected<io::network::native_socket>
 quic_transport::connect(const std::string& host, uint16_t port,
                        optional<io::network::protocol::network>) {
-  cout << "connect called" << endl;
-  cout << "host=" << host << " port=" << port << endl;
   // check for nss_config
   if (mozquic_nss_config(const_cast<char*>(NSS_CONFIG_PATH)) != MOZQUIC_OK) {
-    std::cerr << "nss-config failure" << endl;
+    CAF_LOG_ERROR("nss-config failure");
     return io::network::invalid_native_socket; // cant I return some error?
   }
 
@@ -221,50 +200,54 @@ quic_transport::connect(const std::string& host, uint16_t port,
   config.originPort = port;
   // set quic-related things
   CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "greaseVersionNegotiation",
-                                          0, nullptr),
-                    "connect-versionNegotiation");
+                    0, nullptr), "connect-versionNegotiation");
   CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "tolerateBadALPN", 1,
-                                          nullptr), "connect-tolerateALPN");
+                    nullptr), "connect-tolerateALPN");
   CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "tolerateNoTransportParams",
-                                          1, nullptr),
-                    "connect-noTransportParams");
+                    1, nullptr), "connect-noTransportParams");
   CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "maxSizeAllowed", 1452,
-                                          nullptr), "connect-maxSize");
+                    nullptr), "connect-maxSize");
   CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr),
                     "connect-0rtt");
 
   CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection_transport_pol, &config),
                     "connect-new_conn");
   CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection_transport_pol,
-          connectionCB_connect), "connect-callback");
-  CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection_transport_pol, &closure),
-                    "connect-callback closure_ip4");
-  CHECK_MOZQUIC_ERR(mozquic_start_client(connection_transport_pol), "connect-start");
+                    connectionCB_connect), "connect-callback");
+  CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection_transport_pol,
+                    &closure), "connect-callback closure_ip4");
+  CHECK_MOZQUIC_ERR(mozquic_start_client(connection_transport_pol),
+                    "connect-start");
 
   uint32_t i=0;
   do {
-    usleep (1000); // this is for handleio todo
+    usleep (1000);
     auto code = mozquic_IO(connection_transport_pol);
     if (code != MOZQUIC_OK) {
-      std::cerr << "connect: retcode != MOZQUIC_OK!!" << endl;
       break;
     }
   } while (++i < 2000 && !closure.connected);
 
   if (!closure.connected) {
-    cout << "connect didnt work." << endl;
+    CAF_LOG_ERROR("connect failed");
     return io::network::invalid_native_socket;
   }
 
   // start new stream for this transport.
-  mozquic_start_new_stream(&stream, connection_transport_pol, 0, 0, const_cast<char*>(""), 0, 0);
-
-  auto sock = mozquic_osfd(connection_transport_pol);
-
-  cout << "connect worked! fd = " << sock << "\n" << connection_transport_pol << endl;
-  return sock;
+  mozquic_start_new_stream(&stream, connection_transport_pol, 0, 0,
+                           const_cast<char*>(""), 0, 0);
+  return mozquic_osfd(connection_transport_pol);
 }
 
+int trigger_mozquic_IO(mozquic_connection_t* connection, int amount) {
+  do {
+    if(mozquic_IO(connection) != MOZQUIC_OK) {
+      return -1;
+    }
+    usleep(1000);
+  } while(--amount >= 0);
+  return 0;
+}
 
 } // namespace policy
 } // namespace caf

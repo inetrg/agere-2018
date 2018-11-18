@@ -1,0 +1,3 @@
+5602 caf ERROR actor0 139717389555456 caf.io.network.default_multiplexer handle default_multiplexer.cpp:255 file descriptor registered twice
+10818 caf ERROR actor0 140419594688256 caf.io.network.default_multiplexer handle default_multiplexer.cpp:255 file descriptor registered twice
+11556 caf ERROR actor0 140327817025280 caf.io.network.default_multiplexer handle default_multiplexer.cpp:255 file descriptor registered twice

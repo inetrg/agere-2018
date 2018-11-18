@@ -18,7 +18,6 @@
 
 #pragma once
 
-#include <zconf.h>
 #include <set>
 #include "caf/io/newb.hpp"
 #include "caf/config.hpp"
@@ -33,6 +32,8 @@
 namespace caf {
 namespace policy {
 
+int trigger_mozquic_IO(mozquic_connection_t* connection, int amount = 20);
+
 static const char* NSS_CONFIG_PATH =
         "/home/jakob/CLionProjects/agere-2018/nss-config/";
 
@@ -42,12 +43,15 @@ private:
   mozquic_connection_t* connection_transport_pol;
   mozquic_stream_t* stream;
   mozquic_closure closure;
+  io::acceptor_base* acceptor;
 
 public:
-  quic_transport(mozquic_connection_t* conn, mozquic_stream_t* stream)
+  quic_transport(io::acceptor_base* acceptor, mozquic_connection_t* conn,
+                 mozquic_stream_t* stream)
     : connection_transport_pol{conn},
       stream{stream},
       closure{},
+      acceptor{acceptor},
       read_threshold{1},
       collected{0},
       maximum{0},
@@ -55,13 +59,12 @@ public:
       writing{false},
       written{0} {
     configure_read(io::receive_policy::at_most(1024));
-    std::cout << "quic_transport()" << std::endl;
   }
-  explicit quic_transport(mozquic_stream_t* stream) : quic_transport(nullptr, stream) {};
-  quic_transport() : quic_transport(nullptr, nullptr) {};
+  quic_transport(io::acceptor_base* acceptor, mozquic_stream_t* stream) :
+          quic_transport(acceptor, nullptr, stream) {};
+  quic_transport() : quic_transport(nullptr, nullptr, nullptr) {};
 
   ~quic_transport() override {
-    std::cout << "~quic_transport()" << std::endl;
     if (connection_transport_pol) {
       mozquic_shutdown_connection(connection_transport_pol);
       mozquic_destroy_connection(connection_transport_pol);
@@ -108,14 +111,11 @@ private:
   std::vector<caf::abstract_actor*> newbs;
 
 public:
-  accept_quic() : accept<Message>(true) {
-    std::cout << "accept_quic()" << std::endl;
-    connection_accept_pol = nullptr;
+  accept_quic() : accept<Message>(true),
+                  connection_accept_pol{nullptr} {
   };
 
   ~accept_quic() override {
-    // destroy all pending connections
-    std::cout << "~accept_quic()" << std::endl;
     // nullcheck mozquic_functions aren't nullsafe!
     if (connection_accept_pol) {
       mozquic_shutdown_connection(connection_accept_pol);
@@ -126,10 +126,9 @@ public:
 
   expected<io::network::native_socket>
   create_socket(uint16_t port, const char*, bool) override {
-    std::cout << "create_socket called" << std::endl;
     // check for nss_config
     if (mozquic_nss_config(const_cast<char*>(NSS_CONFIG_PATH)) != MOZQUIC_OK) {
-      std::cerr << "nss-config failure" << std::endl;
+      CAF_LOG_ERROR("nss-config failure");
       return io::network::invalid_native_socket;
     }
 
@@ -169,16 +168,7 @@ public:
     CHECK_MOZQUIC_ERR(mozquic_start_server(connection_accept_pol),
                       "setup-start_server");
 
-    auto i = 0;
-    do {
-      mozquic_IO(connection_accept_pol);
-      usleep(1000);
-    } while(++i < 100);
-
-    std::cout << "server initialized - Listening on port " <<
-              config.originPort << " with fd = " <<
-              mozquic_osfd(connection_accept_pol) << "\n"
-              << connection_accept_pol << std::endl;
+    trigger_mozquic_IO(connection_accept_pol);
 
     return mozquic_osfd(connection_accept_pol);
   }
@@ -188,7 +178,7 @@ public:
     for (auto stream : closure.new_streams) {
       if(streams.find(stream) != streams.end()) continue;
       int fd = mozquic_osfd(connection_accept_pol);
-      transport_ptr transport{new quic_transport(stream)};
+      transport_ptr transport{new quic_transport(base, stream)};
       auto en = base->create_newb(fd, std::move(transport));
       auto ptr = caf::actor_cast<caf::abstract_actor *>(*en);
       CAF_ASSERT(ptr != nullptr);
@@ -196,60 +186,46 @@ public:
       newbs.emplace_back(ptr);
       init(base, ref);
       streams.insert(stream);
-      std::cout << "new connection_transport_pol accepted." << std::endl;
     }
     closure.new_streams.clear();
   }
 
   void read_event(io::acceptor_base* base) override {
     using namespace io::network;
-    std::cout << "read_event called" << std::endl;
-    int i = 0;
-    do {
-      mozquic_IO(connection_accept_pol);
-      usleep (1000);
-    } while(++i < 200);
+    trigger_mozquic_IO(connection_accept_pol);
 
     // accept all pending connections
     accept_connection(base);
 
-    std::cout << "checking transports" << std::endl;
     // check existing connections for incoming data
     for (auto ptr : newbs) {
-      std::cout << "trans" << std::endl;
+      //std::cout << "trans->read_event()" << std::endl;
       auto& ref = dynamic_cast<io::newb<Message> &>(*ptr);
       ref.read_event();
     }
 
     // trigger IO some more after read/write
-    i = 0;
-    do {
-      mozquic_IO(connection_accept_pol);
-      usleep (1000);
-    } while(++i < 200);
-
-    std::cout << "read_event done" << std::endl;
+    trigger_mozquic_IO(connection_accept_pol);
   }
 
-  error write_event(io::acceptor_base*) override {
+  error write_event(io::acceptor_base* base) override {
     for (auto ptr : newbs) {
-      std::cout << "trans" << std::endl;
       auto& ref = dynamic_cast<io::newb<Message> &>(*ptr);
       ref.write_event();
     }
+    trigger_mozquic_IO(connection_accept_pol);
+    base->stop_writing();
     return none;
   }
 
   std::pair<io::network::native_socket, transport_ptr>
   accept_event(io::acceptor_base *) override {
-    std::cout << "accept_event called" << std::endl;
     return {0, nullptr};
   }
 
   void init(io::acceptor_base*, io::newb<Message>& spawned) override {
-    std::cout << "init called" << std::endl;
     spawned.start();
-    std::cout << "init done." << std::endl;
+    spawned.stop_writing();
   }
 };
 
