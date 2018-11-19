@@ -225,6 +225,7 @@ public:
 
   void init(io::acceptor_base*, io::newb<Message>& spawned) override {
     spawned.start();
+    spawned.stop_reading();
     spawned.stop_writing();
   }
 };

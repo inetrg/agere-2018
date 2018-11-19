@@ -74,10 +74,12 @@ io::network::rw_state quic_transport::read_some
   uint32_t sres = 0;
   auto fin = 0;
   // trigger connection_accept_pol to get incoming data for recv
-  auto res = trigger_mozquic_IO(connection_transport_pol);
-  if (res != MOZQUIC_OK) {
-    CAF_LOG_ERROR("recv failed");
-    return io::network::rw_state::failure;
+  if(connection_transport_pol) {
+    auto res = trigger_mozquic_IO(connection_transport_pol);
+    if (res != MOZQUIC_OK) {
+      CAF_LOG_ERROR("recv failed");
+      return io::network::rw_state::failure;
+    }
   }
   auto code = mozquic_recv(stream,
                            buf,
@@ -142,11 +144,13 @@ parent) {
     CAF_LOG_ERROR("send failed");
     return io::network::rw_state::failure;
   }
-  // trigger IO so data will be passed through
-  res = trigger_mozquic_IO(connection_transport_pol);
-  if (res != MOZQUIC_OK) {
-    CAF_LOG_ERROR("send failed");
-    return io::network::rw_state::failure;
+  if(connection_transport_pol) {
+    // trigger IO so data will be passed through
+    res = trigger_mozquic_IO(connection_transport_pol);
+    if (res != MOZQUIC_OK) {
+      CAF_LOG_ERROR("send failed");
+      return io::network::rw_state::failure;
+    }
   }
   written += len;
   auto remaining = send_buffer.size() - written;
