@@ -168,7 +168,7 @@ public:
     CHECK_MOZQUIC_ERR(mozquic_start_server(connection_accept_pol),
                       "setup-start_server");
 
-    trigger_mozquic_IO(connection_accept_pol);
+    mozquic_IO(connection_accept_pol);
 
     return mozquic_osfd(connection_accept_pol);
   }
@@ -192,20 +192,19 @@ public:
 
   void read_event(io::acceptor_base* base) override {
     using namespace io::network;
-    trigger_mozquic_IO(connection_accept_pol);
+    mozquic_IO(connection_accept_pol);
 
     // accept all pending connections
     accept_connection(base);
 
     // check existing connections for incoming data
     for (auto ptr : newbs) {
-      //std::cout << "trans->read_event()" << std::endl;
       auto& ref = dynamic_cast<io::newb<Message> &>(*ptr);
       ref.read_event();
     }
 
     // trigger IO some more after read/write
-    trigger_mozquic_IO(connection_accept_pol);
+    mozquic_IO(connection_accept_pol);
   }
 
   error write_event(io::acceptor_base* base) override {
@@ -213,7 +212,7 @@ public:
       auto& ref = dynamic_cast<io::newb<Message> &>(*ptr);
       ref.write_event();
     }
-    trigger_mozquic_IO(connection_accept_pol);
+    mozquic_IO(connection_accept_pol);
     base->stop_writing();
     return none;
   }

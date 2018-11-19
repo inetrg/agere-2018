@@ -59,9 +59,6 @@
 # endif
 #endif
 
-using std::cout;
-using std::endl;
-
 namespace caf {
 namespace policy {
 
@@ -75,7 +72,7 @@ io::network::rw_state quic_transport::read_some
   auto fin = 0;
   // trigger connection_accept_pol to get incoming data for recv
   if(connection_transport_pol) {
-    auto res = trigger_mozquic_IO(connection_transport_pol);
+    auto res = mozquic_IO(connection_transport_pol);
     if (res != MOZQUIC_OK) {
       CAF_LOG_ERROR("recv failed");
       return io::network::rw_state::failure;
@@ -146,7 +143,7 @@ parent) {
   }
   if(connection_transport_pol) {
     // trigger IO so data will be passed through
-    res = trigger_mozquic_IO(connection_transport_pol);
+    res = mozquic_IO(connection_transport_pol);
     if (res != MOZQUIC_OK) {
       CAF_LOG_ERROR("send failed");
       return io::network::rw_state::failure;
