@@ -8,6 +8,10 @@
 #include "caf/policy/transport.hpp"
 #include <cstdint>
 
+constexpr char nss_config_path[] =
+                "/home/jakob/CLionProjects/agere-2018/nss-config/";
+
+
 int connectionCB(void* closure, uint32_t event, void* param);
 int connectionCB_connect(void *closure, uint32_t event, void *param);
 

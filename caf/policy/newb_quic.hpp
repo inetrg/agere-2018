@@ -26,38 +26,26 @@
 #include "caf/policy/accept.hpp"
 #include "caf/policy/transport.hpp"
 #include "MozQuic.h"
-#include "../../src/mozquic_helper.hpp"
-#include "../../src/mozquic_CB.h"
+#include "detail/mozquic_helper.hpp"
+#include "detail/mozquic_CB.h"
 
 namespace caf {
 namespace policy {
 
-int trigger_mozquic_IO(mozquic_connection_t* connection, int amount = 20);
-
-static const char* NSS_CONFIG_PATH =
-        "/home/jakob/CLionProjects/agere-2018/nss-config/";
-
-struct quic_transport : public transport {
-private:
-  // connection_transport_pol state
-  mozquic_connection_t* connection_transport_pol;
-  mozquic_stream_t* stream;
-  mozquic_closure closure;
-  io::acceptor_base* acceptor;
-
+class quic_transport : public transport {
 public:
   quic_transport(io::acceptor_base* acceptor, mozquic_connection_t* conn,
                  mozquic_stream_t* stream)
-    : connection_transport_pol{conn},
-      stream{stream},
-      closure{},
-      acceptor{acceptor},
-      read_threshold{1},
-      collected{0},
-      maximum{0},
-      rd_flag{io::receive_policy_flag::exactly},
-      writing{false},
-      written{0} {
+    : connection_transport_pol_{conn},
+      stream_{stream},
+      closure_{},
+      acceptor_{acceptor},
+      read_threshold_{1},
+      collected_{0},
+      maximum_{0},
+      rd_flag_{io::receive_policy_flag::exactly},
+      writing_{false},
+      written_{0} {
     configure_read(io::receive_policy::at_most(1024));
   }
   quic_transport(io::acceptor_base* acceptor, mozquic_stream_t* stream) :
@@ -65,9 +53,9 @@ public:
   quic_transport() : quic_transport(nullptr, nullptr, nullptr) {};
 
   ~quic_transport() override {
-    if (connection_transport_pol) {
-      mozquic_shutdown_connection(connection_transport_pol);
-      mozquic_destroy_connection(connection_transport_pol);
+    if (connection_transport_pol_) {
+      mozquic_shutdown_connection(connection_transport_pol_);
+      mozquic_destroy_connection(connection_transport_pol_);
     }
   }
 
@@ -89,37 +77,44 @@ public:
   connect(const std::string& host, uint16_t port,
           optional<io::network::protocol::network>) override;
 
+private:
+  // connection_transport_pol state
+  mozquic_connection_t* connection_transport_pol_;
+  mozquic_stream_t* stream_;
+  mozquic_closure closure_;
+  io::acceptor_base* acceptor_;
+
   // State for reading.
-  size_t read_threshold;
-  size_t collected;
-  size_t maximum;
-  io::receive_policy_flag rd_flag;
+  size_t read_threshold_;
+  size_t collected_;
+  size_t maximum_;
+  io::receive_policy_flag rd_flag_;
 
   // State for writing.
-  bool writing;
-  size_t written;
+  bool writing_;
+  size_t written_;
 };
 
 // only server uses acceptors
 template <class Message>
-struct accept_quic : public accept<Message> {
+class accept_quic : public accept<Message> {
 private:
   // connection_ip4 state
-  mozquic_closure closure;
-  mozquic_connection_t* connection_accept_pol;
-  std::set<mozquic_stream_t*> streams;
-  std::vector<caf::abstract_actor*> newbs;
+  mozquic_closure closure_;
+  mozquic_connection_t* connection_accept_pol_;
+  std::set<mozquic_stream_t*> streams_;
+  std::vector<caf::actor> newbs_;
 
 public:
   accept_quic() : accept<Message>(true),
-                  connection_accept_pol{nullptr} {
+                  connection_accept_pol_{nullptr} {
   };
 
   ~accept_quic() override {
     // nullcheck mozquic_functions aren't nullsafe!
-    if (connection_accept_pol) {
-      mozquic_shutdown_connection(connection_accept_pol);
-      mozquic_destroy_connection(connection_accept_pol);
+    if (connection_accept_pol_) {
+      mozquic_shutdown_connection(connection_accept_pol_);
+      mozquic_destroy_connection(connection_accept_pol_);
     }
   }
 
@@ -127,7 +122,7 @@ public:
   expected<io::network::native_socket>
   create_socket(uint16_t port, const char*, bool) override {
     // check for nss_config
-    if (mozquic_nss_config(const_cast<char*>(NSS_CONFIG_PATH)) != MOZQUIC_OK) {
+    if (mozquic_nss_config(const_cast<char*>(nss_config_path)) != MOZQUIC_OK) {
       CAF_LOG_ERROR("nss-config failure");
       return io::network::invalid_native_socket;
     }
@@ -157,62 +152,67 @@ public:
     // setting up the connection_transport_pol
     config.ipv6 = 1;
 
-    CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection_accept_pol, &config),
+    CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection_accept_pol_, &config),
                       "setup-new_conn");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection_accept_pol,
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection_accept_pol_,
                                                  connectionCB),
                       "setup-event_cb");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection_accept_pol,
-                                                         &closure),
+    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection_accept_pol_,
+                                                         &closure_),
                       "setup-event_cb_closure");
-    CHECK_MOZQUIC_ERR(mozquic_start_server(connection_accept_pol),
+    CHECK_MOZQUIC_ERR(mozquic_start_server(connection_accept_pol_),
                       "setup-start_server");
 
-    mozquic_IO(connection_accept_pol);
+    mozquic_IO(connection_accept_pol_);
 
-    return mozquic_osfd(connection_accept_pol);
+    return mozquic_osfd(connection_accept_pol_);
   }
 
   void accept_connection(io::acceptor_base* base) {
     // create newb with new connection_transport_pol
-    for (auto stream : closure.new_streams) {
-      if(streams.find(stream) != streams.end()) continue;
-      int fd = mozquic_osfd(connection_accept_pol);
-      transport_ptr transport{new quic_transport(base, stream)};
+    for (auto stream : closure_.new_streams) {
+      if(streams_.find(stream) != streams_.end()) continue;
+      int fd = mozquic_osfd(connection_accept_pol_);
+      transport_ptr transport{new quic_transport(base, connection_accept_pol_,
+                                                 stream)};
       auto en = base->create_newb(fd, std::move(transport));
       auto ptr = caf::actor_cast<caf::abstract_actor *>(*en);
       CAF_ASSERT(ptr != nullptr);
       auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
-      newbs.emplace_back(ptr);
       init(base, ref);
-      streams.insert(stream);
+      newbs_.emplace_back(*en);
+      streams_.insert(stream);
     }
-    closure.new_streams.clear();
+    closure_.new_streams.clear();
   }
 
   void read_event(io::acceptor_base* base) override {
     using namespace io::network;
-    mozquic_IO(connection_accept_pol);
+    mozquic_IO(connection_accept_pol_);
 
     // accept all pending connections
     accept_connection(base);
 
     // check existing connections for incoming data
-    for (auto ptr : newbs) {
-      auto& ref = dynamic_cast<io::newb<Message> &>(*ptr);
+    for (auto& act : newbs_) {
+      auto ptr = caf::actor_cast<caf::abstract_actor *>(act);
+      CAF_ASSERT(ptr != nullptr);
+      auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
       ref.read_event();
     }
 
     // trigger IO some more after read/write
-    mozquic_IO(connection_accept_pol);
+    mozquic_IO(connection_accept_pol_);
   }
 
   error write_event(io::acceptor_base* base) override {
-    for (auto ptr : newbs) {
-      auto& ref = dynamic_cast<io::newb<Message> &>(*ptr);
+    for (auto& act : newbs_) {
+      auto ptr = caf::actor_cast<caf::abstract_actor *>(act);
+      CAF_ASSERT(ptr != nullptr);
+      auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
       ref.write_event();
     }
-    mozquic_IO(connection_accept_pol);
+    mozquic_IO(connection_accept_pol_);
     base->stop_writing();
     return none;
   }
