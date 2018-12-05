@@ -162,7 +162,8 @@ public:
     for (auto stream : closure_.new_streams) {
       if(streams_.find(stream) != streams_.end()) continue;
       int fd = mozquic_osfd(connection_accept_pol_);
-      transport_ptr transport{new quic_transport(base, connection_accept_pol_, stream)};
+      transport_ptr transport{new quic_transport(base, connection_accept_pol_,
+                                                 stream)};
       auto en = base->create_newb(fd, std::move(transport));
       auto ptr = caf::actor_cast<caf::abstract_actor *>(*en);
       CAF_ASSERT(ptr != nullptr);
