@@ -8,7 +8,7 @@
 int connectionCB(void* closure, uint32_t event, void* param) {
   auto clo = static_cast<mozquic_closure*>(closure);
   switch (event) {
-    // save new stream for
+    // save new stream_ for
     case MOZQUIC_EVENT_NEW_STREAM_DATA:
       clo->new_streams.insert(param);
       break;

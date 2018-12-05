@@ -105,6 +105,10 @@ if (BENCHMARK_FOUND)
   include_directories(${BENCHMARK_INCLUDE_DIRS})
 endif ()
 
+include_directories(caf)
+include_directories(caf/detail)
+include_directories(caf/policy)
+
 add_custom_target(newb_measurements)
 
 macro(add folder name)
@@ -127,8 +131,8 @@ add_executable(pingpong_quic
         src/pingpong_quic.cpp
         src/newb_quic.cpp
         caf/policy/newb_quic.hpp
-        src/mozquic_helper.hpp
-        src/mozquic_CB.h
+  caf/detail/mozquic_helper.hpp
+  caf/detail/mozquic_CB.h
         src/mozquic_CB.cpp)
 
 target_link_libraries(

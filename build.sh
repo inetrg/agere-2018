@@ -1,4 +1,4 @@
 #!/bin/bash
 
-./configure --with-address-sanitizer --with-clang=clang++ --with-log-level=TRACE
+./configure --with-address-sanitizer --with-clang=clang++
 make -j4
