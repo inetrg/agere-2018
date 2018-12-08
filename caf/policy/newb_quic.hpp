@@ -93,9 +93,7 @@ private:
   std::vector<caf::actor> newbs_;
 
 public:
-  accept_quic() : accept<Message>(true),
-                  connection_accept_pol_{nullptr} {
-  };
+  accept_quic() : accept<Message>(true), connection_accept_pol_{nullptr} {}
 
   ~accept_quic() override {
     // nullcheck mozquic_functions aren't nullsafe!
@@ -112,7 +110,7 @@ public:
     // check for nss_config
     if (mozquic_nss_config(const_cast<char*>(nss_config_path)) != MOZQUIC_OK) {
       CAF_LOG_ERROR("nss-config failure");
-      return io::network::invalid_native_socket;
+      return sec::runtime_error;
     }
 
     mozquic_config_t config{};
@@ -121,37 +119,30 @@ public:
     config.originPort = port;
     config.handleIO = 0;
     config.appHandlesLogging = 0;
-    config.ipv6 = 0;
-    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "tolerateBadALPN", 1,
-                                            nullptr), "setup-bad_ALPN");
-    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "tolerateNoTransportParams",
-                                            1, nullptr), "setup-noTransport");
-    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "sabotageVN", 0, nullptr),
-                      "setup-sabotage");
-    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "forceAddressValidation", 0,
-                                            nullptr), "setup-addrValidation->0");
-    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "streamWindow", 4906,
-                                            nullptr), "setup-streamWindow");
-    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "connWindow", 8192, nullptr),
-                      "setup-connWindow");
-    CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr),
-                      "setup-0rtt");
+    config.ipv6 = 1;
+    mozquic_unstable_api1(&config, "tolerateBadALPN", 1, nullptr);
+    mozquic_unstable_api1(&config, "tolerateNoTransportParams", 1, nullptr);
+    mozquic_unstable_api1(&config, "sabotageVN", 0, nullptr);
+    mozquic_unstable_api1(&config, "forceAddressValidation", 0, nullptr);
+    mozquic_unstable_api1(&config, "streamWindow", 4906, nullptr);
+    mozquic_unstable_api1(&config, "connWindow", 8192, nullptr);
+    mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr);
 
     // setting up the connection_transport_pol
-    config.ipv6 = 1;
-
-    CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection_accept_pol_, &config),
-                      "setup-new_conn");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection_accept_pol_,
-                                                 connectionCB),
-                      "setup-event_cb");
-    CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection_accept_pol_,
-                                                         &closure_),
-                      "setup-event_cb_closure");
-    CHECK_MOZQUIC_ERR(mozquic_start_server(connection_accept_pol_),
-                      "setup-start_server");
-
-    mozquic_IO(connection_accept_pol_);
+   if (MOZQUIC_OK != mozquic_new_connection(&connection_accept_pol_, &config)) {
+     CAF_LOG_ERROR("create new connection failed");
+     return sec::runtime_error;
+   }
+    mozquic_set_event_callback(connection_accept_pol_, connectionCB);
+    mozquic_set_event_callback_closure(connection_accept_pol_, &closure_);
+    if (MOZQUIC_OK != mozquic_start_server(connection_accept_pol_)) {
+      CAF_LOG_ERROR("start_server failed");
+      return sec::runtime_error;
+    }
+    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+      CAF_LOG_ERROR("mozquic_IO failed");
+      return sec::runtime_error;
+    }
 
     return mozquic_osfd(connection_accept_pol_);
   }
@@ -160,11 +151,14 @@ public:
     CAF_LOG_TRACE("");
     // create newb with new connection_transport_pol
     for (auto stream : closure_.new_streams) {
+      // only accept *new* streams
       if(streams_.find(stream) != streams_.end()) continue;
       int fd = mozquic_osfd(connection_accept_pol_);
-      transport_ptr transport{new quic_transport(base, connection_accept_pol_,
+      transport_ptr trans{new quic_transport(base, connection_accept_pol_,
                                                  stream)};
-      auto en = base->create_newb(fd, std::move(transport));
+      trans->prepare_next_read(nullptr);
+      trans->prepare_next_write(nullptr);
+      auto en = base->create_newb(fd, std::move(trans)); // TODO
       auto ptr = caf::actor_cast<caf::abstract_actor *>(*en);
       CAF_ASSERT(ptr != nullptr);
       auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
@@ -178,8 +172,9 @@ public:
   void read_event(io::network::newb_base* base) override {
     CAF_LOG_TRACE("");
     using namespace io::network;
-    mozquic_IO(connection_accept_pol_);
-
+    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+      CAF_LOG_ERROR("mozquic_IO failed");
+    }
     // accept all pending connections
     accept_connection(base);
 
@@ -192,7 +187,9 @@ public:
     }
 
     // trigger IO some more after read/write
-    mozquic_IO(connection_accept_pol_);
+    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+      CAF_LOG_ERROR("mozquic_IO failed");
+    }
   }
 
   error write_event(io::network::newb_base* base) override {
@@ -203,22 +200,42 @@ public:
       auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
       ref.write_event();
     }
-    mozquic_IO(connection_accept_pol_);
+    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+      CAF_LOG_ERROR("mozquic_IO failed");
+      return sec::runtime_error;
+    }
     base->stop_writing();
     return none;
   }
 
-  std::pair<io::network::native_socket, transport_ptr>
-  accept_event(io::network::newb_base *) override {
+  bool add_children_to_loop() override {
     CAF_LOG_TRACE("");
-    return {0, nullptr};
+    return false;
   }
 
-  void init(io::network::newb_base*, io::newb<Message>& spawned) override {
+  void shutdown(io::network::newb_base*, io::network::native_socket) override {
     CAF_LOG_TRACE("");
-    // spawned.start();
-    spawned.stop_reading();
-    // spawned.stop_writing();
+    // clear all saved newbs
+    for (auto& act : newbs_) {
+      auto ptr = caf::actor_cast<caf::abstract_actor *>(act);
+      CAF_ASSERT(ptr != nullptr);
+      auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
+      ref.graceful_shutdown();
+    }
+    newbs_.clear();
+    // close open streams
+    for (auto stream : streams_) {
+      mozquic_end_stream(stream);
+    }
+    streams_.clear();
+    // pass close messages
+    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+      CAF_LOG_ERROR("mozquic_IO failed");
+    }
+    // shutdown connection
+    mozquic_shutdown_connection(connection_accept_pol_);
+    mozquic_destroy_connection(connection_accept_pol_);
+    connection_accept_pol_ = nullptr;
   }
 };
 

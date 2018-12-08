@@ -101,7 +101,7 @@ io::network::rw_state quic_transport::read_some
                            &sres,
                            &fin);
   if (code != MOZQUIC_OK) {
-    CAF_LOG_DEBUG("recv failed" << CAF_ARG(sres));
+    CAF_LOG_ERROR("recv failed" << CAF_ARG(sres));
     return io::network::rw_state::failure;
   }
   auto result = static_cast<size_t>(sres);
@@ -111,11 +111,13 @@ io::network::rw_state quic_transport::read_some
 }
 
 bool quic_transport::should_deliver() {
+  CAF_LOG_TRACE("");
   CAF_LOG_DEBUG(CAF_ARG(collected_) << CAF_ARG(read_threshold_));
   return collected_ >= read_threshold_;
 }
 
 void quic_transport::prepare_next_read(io::network::newb_base*) {
+  CAF_LOG_TRACE("");
   collected_ = 0;
   received_bytes = 0;
   switch (rd_flag_) {
@@ -141,13 +143,14 @@ void quic_transport::prepare_next_read(io::network::newb_base*) {
 }
 
 void quic_transport::configure_read(io::receive_policy::config config) {
+  CAF_LOG_TRACE("");
   rd_flag_ = config.first;
   maximum_ = config.second;
 }
 
-io::network::rw_state quic_transport::write_some(io::network::newb_base*
-parent) {
+io::network::rw_state quic_transport::write_some(io::network::newb_base* parent) {
   CAF_LOG_TRACE("");
+  CAF_ASSERT(parent != nullptr);
   // dont't write if nothing here to write.
   if(!writing_) return io::network::rw_state::success;
   void* buf = send_buffer.data() + written_;
@@ -172,6 +175,8 @@ parent) {
 }
 
 void quic_transport::prepare_next_write(io::network::newb_base* parent) {
+  CAF_LOG_TRACE("");
+  CAF_ASSERT(parent != nullptr);
   written_ = 0;
   send_buffer.clear();
   if (offline_buffer.empty()) {
@@ -206,7 +211,7 @@ quic_transport::connect(const std::string& host, uint16_t port,
   // check for nss_config
   if (mozquic_nss_config(const_cast<char*>(nss_config_path)) != MOZQUIC_OK) {
     CAF_LOG_ERROR("nss-config failure");
-    return io::network::invalid_native_socket; // cant I return some error?
+    return sec::network_syscall_failed;
   }
 
   mozquic_config_t config {};
@@ -216,38 +221,36 @@ quic_transport::connect(const std::string& host, uint16_t port,
   config.originName = host.c_str();
   config.originPort = port;
   // set quic-related things
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "greaseVersionNegotiation",
-                    0, nullptr), "connect-versionNegotiation");
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "tolerateBadALPN", 1,
-                    nullptr), "connect-tolerateALPN");
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "tolerateNoTransportParams",
-                    1, nullptr), "connect-noTransportParams");
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "maxSizeAllowed", 1452,
-                    nullptr), "connect-maxSize");
-  CHECK_MOZQUIC_ERR(mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr),
-                    "connect-0rtt");
+  mozquic_unstable_api1(&config, "greaseVersionNegotiation", 0, nullptr);
+  mozquic_unstable_api1(&config, "tolerateBadALPN", 1, nullptr);
+  mozquic_unstable_api1(&config, "tolerateNoTransportParams", 1, nullptr);
+  mozquic_unstable_api1(&config, "maxSizeAllowed", 1452, nullptr);
+  mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr);
 
-  CHECK_MOZQUIC_ERR(mozquic_new_connection(&connection_transport_pol_, &config),
-                    "connect-new_conn");
-  CHECK_MOZQUIC_ERR(mozquic_set_event_callback(connection_transport_pol_,
-                    connectionCB_connect), "connect-callback");
-  CHECK_MOZQUIC_ERR(mozquic_set_event_callback_closure(connection_transport_pol_,
-                    &closure_), "connect-callback closure_ip4");
-  CHECK_MOZQUIC_ERR(mozquic_start_client(connection_transport_pol_),
-                    "connect-start");
+  if (MOZQUIC_OK != mozquic_new_connection(&connection_transport_pol_, &config)) {
+    CAF_LOG_ERROR("cannot create new connection");
+    return sec::runtime_error;
+  }
+  mozquic_set_event_callback(connection_transport_pol_, connectionCB_connect);
+  mozquic_set_event_callback_closure(connection_transport_pol_, &closure_);
+  if (mozquic_start_client(connection_transport_pol_)) {
+    CAF_LOG_ERROR("start_client failed");
+    return sec::runtime_error;
+  }
 
   uint32_t i=0;
   do {
     usleep (1000);
     auto code = mozquic_IO(connection_transport_pol_);
     if (code != MOZQUIC_OK) {
+      CAF_LOG_ERROR("mozquic_IO failed");
       break;
     }
   } while (++i < 2000 && !closure_.connected);
 
   if (!closure_.connected) {
     CAF_LOG_ERROR("connect failed");
-    return io::network::invalid_native_socket;
+    return sec::cannot_connect_to_node;
   }
 
   // start new stream_ for this transport.
