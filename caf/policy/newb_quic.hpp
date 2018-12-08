@@ -34,9 +34,9 @@ namespace policy {
 
 class quic_transport : public transport {
 public:
-  quic_transport(io::acceptor_base* acceptor, mozquic_connection_t* conn,
+  quic_transport(io::network::newb_base* acceptor, mozquic_connection_t* conn,
                  mozquic_stream_t* stream);
-  quic_transport(io::acceptor_base* acceptor, mozquic_stream_t* stream);
+  quic_transport(io::network::newb_base* acceptor, mozquic_stream_t* stream);
   quic_transport();
 
   ~quic_transport() override {
@@ -46,19 +46,19 @@ public:
     }
   }
 
-  io::network::rw_state read_some(io::newb_base* parent) override;
+  io::network::rw_state read_some(io::network::newb_base* parent) override;
 
   bool should_deliver() override;
 
-  void prepare_next_read(io::newb_base*) override;
+  void prepare_next_read(io::network::newb_base*) override;
 
   void configure_read(io::receive_policy::config config) override;
 
-  io::network::rw_state write_some(io::newb_base* parent) override;
+  io::network::rw_state write_some(io::network::newb_base* parent) override;
 
-  void prepare_next_write(io::newb_base* parent) override;
+  void prepare_next_write(io::network::newb_base* parent) override;
 
-  void flush(io::newb_base* parent) override;
+  void flush(io::network::newb_base* parent) override;
 
   expected<io::network::native_socket>
   connect(const std::string& host, uint16_t port,
@@ -69,7 +69,7 @@ private:
   mozquic_connection_t* connection_transport_pol_;
   mozquic_stream_t* stream_;
   mozquic_closure closure_;
-  io::acceptor_base* acceptor_;
+  io::network::newb_base* acceptor_;
 
   // State for reading.
   size_t read_threshold_;
@@ -156,7 +156,7 @@ public:
     return mozquic_osfd(connection_accept_pol_);
   }
 
-  void accept_connection(io::acceptor_base* base) {
+  void accept_connection(io::network::newb_base* base) {
     CAF_LOG_TRACE("");
     // create newb with new connection_transport_pol
     for (auto stream : closure_.new_streams) {
@@ -175,7 +175,7 @@ public:
     closure_.new_streams.clear();
   }
 
-  void read_event(io::acceptor_base* base) override {
+  void read_event(io::network::newb_base* base) override {
     CAF_LOG_TRACE("");
     using namespace io::network;
     mozquic_IO(connection_accept_pol_);
@@ -195,7 +195,7 @@ public:
     mozquic_IO(connection_accept_pol_);
   }
 
-  error write_event(io::acceptor_base* base) override {
+  error write_event(io::network::newb_base* base) override {
     CAF_LOG_TRACE("");
     for (auto& act : newbs_) {
       auto ptr = caf::actor_cast<caf::abstract_actor *>(act);
@@ -209,12 +209,12 @@ public:
   }
 
   std::pair<io::network::native_socket, transport_ptr>
-  accept_event(io::acceptor_base *) override {
+  accept_event(io::network::newb_base *) override {
     CAF_LOG_TRACE("");
     return {0, nullptr};
   }
 
-  void init(io::acceptor_base*, io::newb<Message>& spawned) override {
+  void init(io::network::newb_base*, io::newb<Message>& spawned) override {
     CAF_LOG_TRACE("");
     // spawned.start();
     spawned.stop_reading();

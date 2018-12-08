@@ -62,7 +62,7 @@
 namespace caf {
 namespace policy {
 
-quic_transport::quic_transport(io::acceptor_base* acceptor, mozquic_connection_t* conn,
+quic_transport::quic_transport(io::network::newb_base* acceptor, mozquic_connection_t* conn,
                                mozquic_stream_t* stream)
         : connection_transport_pol_{conn},
           stream_{stream},
@@ -76,13 +76,13 @@ quic_transport::quic_transport(io::acceptor_base* acceptor, mozquic_connection_t
   configure_read(io::receive_policy::at_most(1024));
 }
 
-quic_transport::quic_transport(io::acceptor_base* acceptor, mozquic_stream_t* stream) :
+quic_transport::quic_transport(io::network::newb_base* acceptor, mozquic_stream_t* stream) :
         quic_transport(acceptor, nullptr, stream) {}
 
 quic_transport::quic_transport() : quic_transport(nullptr, nullptr, nullptr) {}
 
 io::network::rw_state quic_transport::read_some
-(io::newb_base*) {
+(io::network::newb_base*) {
   CAF_LOG_TRACE("");
   receive_buffer.resize(10);
   auto len = receive_buffer.size() - collected_;
@@ -115,7 +115,7 @@ bool quic_transport::should_deliver() {
   return collected_ >= read_threshold_;
 }
 
-void quic_transport::prepare_next_read(io::newb_base*) {
+void quic_transport::prepare_next_read(io::network::newb_base*) {
   collected_ = 0;
   received_bytes = 0;
   switch (rd_flag_) {
@@ -145,7 +145,7 @@ void quic_transport::configure_read(io::receive_policy::config config) {
   maximum_ = config.second;
 }
 
-io::network::rw_state quic_transport::write_some(io::newb_base*
+io::network::rw_state quic_transport::write_some(io::network::newb_base*
 parent) {
   CAF_LOG_TRACE("");
   // dont't write if nothing here to write.
@@ -171,7 +171,7 @@ parent) {
   return io::network::rw_state::success;
 }
 
-void quic_transport::prepare_next_write(io::newb_base* parent) {
+void quic_transport::prepare_next_write(io::network::newb_base* parent) {
   written_ = 0;
   send_buffer.clear();
   if (offline_buffer.empty()) {
@@ -184,7 +184,7 @@ void quic_transport::prepare_next_write(io::newb_base* parent) {
   }
 }
 
-void quic_transport::flush(io::newb_base* parent) {
+void quic_transport::flush(io::network::newb_base* parent) {
   CAF_ASSERT(parent != nullptr);
   CAF_LOG_TRACE(CAF_ARG(offline_buffer.size()));
   if (!offline_buffer.empty() && !writing_) {
