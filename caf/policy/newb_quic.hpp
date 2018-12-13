@@ -19,6 +19,7 @@
 #pragma once
 
 #include <set>
+#include <zconf.h>
 #include "caf/io/newb.hpp"
 #include "caf/config.hpp"
 #include "caf/io/network/default_multiplexer.hpp"
@@ -32,11 +33,13 @@
 namespace caf {
 namespace policy {
 
+const int trigger_threshold = 1;
+
 class quic_transport : public transport {
 public:
-  quic_transport(io::network::newb_base* acceptor, mozquic_connection_t* conn,
+  quic_transport(io::network::acceptor_base* acceptor, mozquic_connection_t* conn,
                  mozquic_stream_t* stream);
-  quic_transport(io::network::newb_base* acceptor, mozquic_stream_t* stream);
+  quic_transport(io::network::acceptor_base* acceptor, mozquic_stream_t* stream);
   quic_transport();
 
   ~quic_transport() override {
@@ -139,41 +142,42 @@ public:
       CAF_LOG_ERROR("start_server failed");
       return sec::runtime_error;
     }
-    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-      CAF_LOG_ERROR("mozquic_IO failed");
-      return sec::runtime_error;
+    for (int i = 0; i < trigger_threshold; ++i) {
+      if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+        CAF_LOG_ERROR("mozquic_IO failed");
+        return sec::runtime_error;
+      }
+      usleep(1000);
     }
 
     return mozquic_osfd(connection_accept_pol_);
   }
 
-  void accept_connection(io::network::newb_base* base) {
+  void accept_connection(io::network::acceptor_base* base) {
     CAF_LOG_TRACE("");
     // create newb with new connection_transport_pol
     for (auto stream : closure_.new_streams) {
       // only accept *new* streams
       if(streams_.find(stream) != streams_.end()) continue;
       int fd = mozquic_osfd(connection_accept_pol_);
-      transport_ptr trans{new quic_transport(base, connection_accept_pol_,
-                                                 stream)};
+      transport_ptr trans{new quic_transport(base, connection_accept_pol_, stream)};
       trans->prepare_next_read(nullptr);
       trans->prepare_next_write(nullptr);
-      auto en = base->create_newb(fd, std::move(trans)); // TODO
-      auto ptr = caf::actor_cast<caf::abstract_actor *>(*en);
-      CAF_ASSERT(ptr != nullptr);
-      auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
-      init(base, ref);
+      auto en = base->create_newb(fd, std::move(trans), false);
       newbs_.emplace_back(*en);
       streams_.insert(stream);
     }
     closure_.new_streams.clear();
   }
 
-  void read_event(io::network::newb_base* base) override {
+  void read_event(io::network::acceptor_base* base) override {
     CAF_LOG_TRACE("");
     using namespace io::network;
-    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-      CAF_LOG_ERROR("mozquic_IO failed");
+    for (int i = 0; i < trigger_threshold; ++i) {
+      if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+        CAF_LOG_ERROR("mozquic_IO failed");
+      }
+      usleep(1000);
     }
     // accept all pending connections
     accept_connection(base);
@@ -187,12 +191,15 @@ public:
     }
 
     // trigger IO some more after read/write
-    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-      CAF_LOG_ERROR("mozquic_IO failed");
+    for (int i = 0; i < trigger_threshold; ++i) {
+      if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+        CAF_LOG_ERROR("mozquic_IO failed");
+      }
+      usleep(1000);
     }
   }
 
-  error write_event(io::network::newb_base* base) override {
+  error write_event(io::network::acceptor_base* base) override {
     CAF_LOG_TRACE("");
     for (auto& act : newbs_) {
       auto ptr = caf::actor_cast<caf::abstract_actor *>(act);
@@ -200,20 +207,18 @@ public:
       auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
       ref.write_event();
     }
-    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-      CAF_LOG_ERROR("mozquic_IO failed");
-      return sec::runtime_error;
+    for (int i = 0; i < trigger_threshold; ++i) {
+      if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+        CAF_LOG_ERROR("mozquic_IO failed");
+        return sec::runtime_error;
+      }
+      usleep(1000);
     }
     base->stop_writing();
     return none;
   }
 
-  bool add_children_to_loop() override {
-    CAF_LOG_TRACE("");
-    return false;
-  }
-
-  void shutdown(io::network::newb_base*, io::network::native_socket) override {
+  void shutdown(io::network::acceptor_base*, io::network::native_socket) override {
     CAF_LOG_TRACE("");
     // clear all saved newbs
     for (auto& act : newbs_) {

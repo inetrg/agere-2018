@@ -62,7 +62,7 @@
 namespace caf {
 namespace policy {
 
-quic_transport::quic_transport(io::network::newb_base* acceptor, mozquic_connection_t* conn,
+quic_transport::quic_transport(io::network::acceptor_base* acceptor, mozquic_connection_t* conn,
                                mozquic_stream_t* stream)
         : connection_transport_pol_{conn},
           stream_{stream},
@@ -76,7 +76,7 @@ quic_transport::quic_transport(io::network::newb_base* acceptor, mozquic_connect
   configure_read(io::receive_policy::at_most(1024));
 }
 
-quic_transport::quic_transport(io::network::newb_base* acceptor, mozquic_stream_t* stream) :
+quic_transport::quic_transport(io::network::acceptor_base* acceptor, mozquic_stream_t* stream) :
         quic_transport(acceptor, nullptr, stream) {}
 
 quic_transport::quic_transport() : quic_transport(nullptr, nullptr, nullptr) {}
@@ -90,10 +90,14 @@ io::network::rw_state quic_transport::read_some
   uint32_t sres = 0;
   auto fin = 0;
   // trigger connection_accept_pol to get incoming data for recv
-  auto res = mozquic_IO(connection_transport_pol_);
-  if (res != MOZQUIC_OK) {
-    CAF_LOG_ERROR("recv failed");
-    return io::network::rw_state::failure;
+  if (connection_transport_pol_) {
+    for (int i = 0; i < trigger_threshold; ++i) {
+      if (MOZQUIC_OK != mozquic_IO(connection_transport_pol_)) {
+        CAF_LOG_ERROR("mozquic_IO failed");
+        return io::network::rw_state::failure;
+      }
+      usleep(1000);
+    }
   }
   auto code = mozquic_recv(stream_,
                            buf,
@@ -162,10 +166,14 @@ io::network::rw_state quic_transport::write_some(io::network::newb_base* parent)
     return io::network::rw_state::failure;
   }
   // trigger IO so data will be passed through
-  res = mozquic_IO(connection_transport_pol_);
-  if (res != MOZQUIC_OK) {
-    CAF_LOG_ERROR("send failed");
-    return io::network::rw_state::failure;
+  if (connection_transport_pol_) {
+    for (int i = 0; i < trigger_threshold; ++i) {
+      if (MOZQUIC_OK != mozquic_IO(connection_transport_pol_)) {
+        CAF_LOG_ERROR("mozquic_IO failed");
+        return io::network::rw_state::failure;
+      }
+      usleep(1000);
+    }
   }
   written_ += len;
   auto remaining = send_buffer.size() - written_;
