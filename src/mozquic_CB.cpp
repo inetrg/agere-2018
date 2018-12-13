@@ -22,7 +22,8 @@ int connectionCB(void* closure, uint32_t event, void* param) {
 
     case MOZQUIC_EVENT_CLOSE_CONNECTION:
     case MOZQUIC_EVENT_ERROR:
-      return mozquic_destroy_connection(param);
+      mozquic_destroy_connection(param);
+      return MOZQUIC_ERR_GENERAL;
 
     default:
       break;
