@@ -48,3 +48,23 @@ cmake .. -DCMAKE_BUILD_TYPE=RELEASE
 make -j$cores
 cd $ROOT_DIR
 
+echo "Building Mozquic"
+if cd $ROOT_DIR/mozquic 
+then 
+  git pull
+else
+  cd $ROOT_DIR
+  git clone https://github.com/jakobod/mozquic.git
+  cd mozquic
+  mkdir build
+fi
+cd $ROOT_DIR/mozquic/build
+cmake ..
+make -j$cores
+cd $ROOT_DIR
+
+echo "building agere-project now"
+./configure --with-clang=clang++
+make -j$cores
+
+

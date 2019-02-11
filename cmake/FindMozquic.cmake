@@ -20,7 +20,7 @@
 
 find_library(MOZQUIC_LIBRARIES
     NAMES mozquic
-    HINTS ${MOZQUIC_ROOT_DIR}
+    HINTS "${MOZQUIC_ROOT_DIR}/build"
 )
 
 find_path(MOZQUIC_INCLUDE_DIRS

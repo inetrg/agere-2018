@@ -69,7 +69,7 @@ if (CAF_FOUND)
 endif ()
 
 if (NOT MOZQUIC_ROOT_DIR)
-  set(MOZQUIC_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../mozquic/)
+  set(MOZQUIC_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mozquic/)
 endif ()
   find_package(Mozquic)
 if (MOZQUIC_FOUND)
