@@ -28,7 +28,7 @@ else
 fi
 cd $ROOT_DIR/actor-framework
 git apply $ROOT_DIR/caf-poll.diff
-./configure --build-type=release --no-opencl --no-tools --no-examples
+./configure --build-type=release --no-opencl --no-tools --no-examples --with-clang=clang++
 make -j$cores
 cd $ROOT_DIR
 

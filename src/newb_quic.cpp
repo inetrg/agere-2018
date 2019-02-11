@@ -76,6 +76,12 @@ quic_transport::quic_transport(io::network::acceptor_base* acceptor, mozquic_con
   configure_read(io::receive_policy::at_most(1024));
 }
 
+<<<<<<< HEAD
+=======
+quic_transport::quic_transport(io::network::acceptor_base* acceptor, mozquic_stream_t* stream) :
+        quic_transport(acceptor, nullptr, stream) {}
+
+>>>>>>> eb83c3d8d0d0a1ec689d6056747f51a52f12ebd6
 quic_transport::quic_transport() : quic_transport(nullptr, nullptr, nullptr) {}
 
 io::network::rw_state quic_transport::read_some
@@ -88,16 +94,24 @@ io::network::rw_state quic_transport::read_some
   auto fin = 0;
   // trigger connection_accept_pol to get incoming data for recv
   if (connection_transport_pol_) {
+<<<<<<< HEAD
     if (MOZQUIC_OK != mozquic_IO(connection_transport_pol_)) {
       CAF_LOG_ERROR("mozquic_IO failed");
       return io::network::rw_state::failure;
     }
     for (int i = 0; i < trigger_threshold; ++i) {
       usleep(1000);
+=======
+    for (int i = 0; i < trigger_threshold; ++i) {
+>>>>>>> eb83c3d8d0d0a1ec689d6056747f51a52f12ebd6
       if (MOZQUIC_OK != mozquic_IO(connection_transport_pol_)) {
         CAF_LOG_ERROR("mozquic_IO failed");
         return io::network::rw_state::failure;
       }
+<<<<<<< HEAD
+=======
+      usleep(1000);
+>>>>>>> eb83c3d8d0d0a1ec689d6056747f51a52f12ebd6
     }
   }
   auto code = mozquic_recv(stream_,
@@ -168,16 +182,24 @@ io::network::rw_state quic_transport::write_some(io::network::newb_base* parent)
   }
   // trigger IO so data will be passed through
   if (connection_transport_pol_) {
+<<<<<<< HEAD
     if (MOZQUIC_OK != mozquic_IO(connection_transport_pol_)) {
       CAF_LOG_ERROR("mozquic_IO failed");
       return io::network::rw_state::failure;
     }
     for (int i = 0; i < trigger_threshold; ++i) {
       usleep(1000);
+=======
+    for (int i = 0; i < trigger_threshold; ++i) {
+>>>>>>> eb83c3d8d0d0a1ec689d6056747f51a52f12ebd6
       if (MOZQUIC_OK != mozquic_IO(connection_transport_pol_)) {
         CAF_LOG_ERROR("mozquic_IO failed");
         return io::network::rw_state::failure;
       }
+<<<<<<< HEAD
+=======
+      usleep(1000);
+>>>>>>> eb83c3d8d0d0a1ec689d6056747f51a52f12ebd6
     }
   }
   written_ += len;

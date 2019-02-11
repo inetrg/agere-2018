@@ -33,12 +33,20 @@
 namespace caf {
 namespace policy {
 
+<<<<<<< HEAD
 const int trigger_threshold = 2;
+=======
+const int trigger_threshold = 1;
+>>>>>>> eb83c3d8d0d0a1ec689d6056747f51a52f12ebd6
 
 class quic_transport : public transport {
 public:
   quic_transport(io::network::acceptor_base* acceptor, mozquic_connection_t* conn,
                  mozquic_stream_t* stream);
+<<<<<<< HEAD
+=======
+  quic_transport(io::network::acceptor_base* acceptor, mozquic_stream_t* stream);
+>>>>>>> eb83c3d8d0d0a1ec689d6056747f51a52f12ebd6
   quic_transport();
 
   ~quic_transport() override {
@@ -148,9 +156,12 @@ public:
       CAF_LOG_ERROR("start_server failed");
       return sec::runtime_error;
     }
-    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-      CAF_LOG_ERROR("mozquic_IO failed");
-      return sec::runtime_error;
+    for (int i = 0; i < trigger_threshold; ++i) {
+      if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+        CAF_LOG_ERROR("mozquic_IO failed");
+        return sec::runtime_error;
+      }
+      usleep(1000);
     }
     return mozquic_osfd(connection_accept_pol_);
   }
@@ -175,8 +186,11 @@ public:
   void read_event(io::network::acceptor_base* base) override {
     CAF_LOG_TRACE("");
     using namespace io::network;
-    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-      CAF_LOG_ERROR("mozquic_IO failed");
+    for (int i = 0; i < trigger_threshold; ++i) {
+      if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+        CAF_LOG_ERROR("mozquic_IO failed");
+      }
+      usleep(1000);
     }
     for (int i = 0; i < trigger_threshold; ++i) {
       usleep(1000);
@@ -196,8 +210,11 @@ public:
     }
 
     // trigger IO some more after read/write
-    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-      CAF_LOG_ERROR("mozquic_IO failed");
+    for (int i = 0; i < trigger_threshold; ++i) {
+      if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+        CAF_LOG_ERROR("mozquic_IO failed");
+      }
+      usleep(1000);
     }
     for (int i = 0; i < trigger_threshold; ++i) {
       usleep(1000);
@@ -215,9 +232,12 @@ public:
       auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
       ref.write_event();
     }
-    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-      CAF_LOG_ERROR("mozquic_IO failed");
-      return sec::runtime_error;
+    for (int i = 0; i < trigger_threshold; ++i) {
+      if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
+        CAF_LOG_ERROR("mozquic_IO failed");
+        return sec::runtime_error;
+      }
+      usleep(1000);
     }
     for (int i = 0; i < trigger_threshold; ++i) {
       usleep(1000);
