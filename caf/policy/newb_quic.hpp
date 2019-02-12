@@ -100,7 +100,6 @@ public:
     }
   }
 
-
   expected<io::network::native_socket>
   create_socket(uint16_t port, const char*, bool) override {
     CAF_LOG_TRACE("");
@@ -126,10 +125,10 @@ public:
     mozquic_unstable_api1(&config, "enable0RTT", 1, nullptr);
 
     // setting up the connection_transport_pol
-   if (MOZQUIC_OK != mozquic_new_connection(&connection_accept_pol_, &config)) {
-     CAF_LOG_ERROR("create new connection failed");
-     return sec::runtime_error;
-   }
+    if (MOZQUIC_OK != mozquic_new_connection(&connection_accept_pol_, &config)) {
+      CAF_LOG_ERROR("create new connection failed");
+      return sec::runtime_error;
+    }
     mozquic_set_event_callback(connection_accept_pol_, connectionCB);
     mozquic_set_event_callback_closure(connection_accept_pol_, &closure_);
     if (MOZQUIC_OK != mozquic_start_server(connection_accept_pol_)) {
@@ -167,12 +166,6 @@ public:
     CAF_LOG_TRACE("");
     using namespace io::network;
     for (int i = 0; i < trigger_threshold; ++i) {
-      if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-        CAF_LOG_ERROR("mozquic_IO failed");
-      }
-      usleep(1000);
-    }
-    for (int i = 0; i < trigger_threshold; ++i) {
       usleep(1000);
       if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
         CAF_LOG_ERROR("mozquic_IO failed");
@@ -188,14 +181,7 @@ public:
       auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
       ref.read_event();
     }
-
     // trigger IO some more after read/write
-    for (int i = 0; i < trigger_threshold; ++i) {
-      if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-        CAF_LOG_ERROR("mozquic_IO failed");
-      }
-      usleep(1000);
-    }
     for (int i = 0; i < trigger_threshold; ++i) {
       usleep(1000);
       if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
@@ -211,13 +197,6 @@ public:
       CAF_ASSERT(ptr != nullptr);
       auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
       ref.write_event();
-    }
-    for (int i = 0; i < trigger_threshold; ++i) {
-      if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-        CAF_LOG_ERROR("mozquic_IO failed");
-        return sec::runtime_error;
-      }
-      usleep(1000);
     }
     for (int i = 0; i < trigger_threshold; ++i) {
       usleep(1000);

@@ -28,7 +28,7 @@ else
 fi
 cd $ROOT_DIR/actor-framework
 git apply $ROOT_DIR/caf-poll.diff
-./configure --build-type=release --no-opencl --no-tools --no-examples --with-clang=clang++
+./configure --build-type=debug --no-opencl --no-tools --no-examples --with-clang=clang++ --with-log-level=TRACE
 make -j$cores
 cd $ROOT_DIR
 
@@ -49,8 +49,8 @@ make -j$cores
 cd $ROOT_DIR
 
 echo "Building Mozquic"
-if cd $ROOT_DIR/mozquic 
-then 
+if cd $ROOT_DIR/mozquic
+then
   git pull
 else
   cd $ROOT_DIR
@@ -64,7 +64,7 @@ make -j$cores
 cd $ROOT_DIR
 
 echo "building agere-project now"
-./configure --with-clang=clang++
+./configure --build-type=debug --with-clang=clang++ --with-log-level=TRACE
 make -j$cores
 
 

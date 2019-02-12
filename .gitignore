@@ -20,6 +20,8 @@ cmake-build-debug/
 
 ### project ###
 build/
+*.out
 *.log
 *.ini
-
+mozquic/
+mozquic/*

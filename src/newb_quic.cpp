@@ -259,6 +259,7 @@ quic_transport::connect(const std::string& host, uint16_t port,
     return sec::runtime_error;
   }
 
+  // trigger until connected
   uint32_t i=0;
   do {
     usleep (1000);
@@ -268,7 +269,6 @@ quic_transport::connect(const std::string& host, uint16_t port,
       break;
     }
   } while (++i < 2000 && !closure_.connected);
-
   if (!closure_.connected) {
     CAF_LOG_ERROR("connect failed");
     return sec::cannot_connect_to_node;
