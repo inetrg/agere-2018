@@ -33,35 +33,15 @@
 namespace caf {
 namespace policy {
 
-<<<<<<< HEAD
 const int trigger_threshold = 2;
-=======
-const int trigger_threshold = 1;
->>>>>>> eb83c3d8d0d0a1ec689d6056747f51a52f12ebd6
 
 class quic_transport : public transport {
 public:
   quic_transport(io::network::acceptor_base* acceptor, mozquic_connection_t* conn,
                  mozquic_stream_t* stream);
-<<<<<<< HEAD
-=======
-  quic_transport(io::network::acceptor_base* acceptor, mozquic_stream_t* stream);
->>>>>>> eb83c3d8d0d0a1ec689d6056747f51a52f12ebd6
   quic_transport();
 
-  ~quic_transport() override {
-    if (connection_transport_pol_) {
-      mozquic_end_stream(stream_);
-      int i = 0;
-      while (i++ < 20) {
-        mozquic_IO(connection_transport_pol_);
-      }
-      if (!acceptor_) {
-        mozquic_shutdown_connection(connection_transport_pol_);
-        mozquic_destroy_connection(connection_transport_pol_);
-      }
-    }
-  }
+  ~quic_transport() override;
 
   io::network::rw_state read_some(io::network::newb_base* parent) override;
 
