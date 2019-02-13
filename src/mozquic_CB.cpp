@@ -3,7 +3,6 @@
 //
 
 #include "mozquic_CB.h"
-#include <zconf.h>
 
 int connectionCB(void* closure, uint32_t event, void* param) {
   CAF_LOG_TRACE("");

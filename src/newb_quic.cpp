@@ -79,18 +79,9 @@ quic_transport::quic_transport(io::network::acceptor_base* acceptor, mozquic_con
 quic_transport::quic_transport() : quic_transport(nullptr, nullptr, nullptr) {}
 
 quic_transport::~quic_transport() {
-  if (connection_transport_pol_) {
-    if (stream_) {
-      mozquic_end_stream(stream_);
-    }
-    int i = 0;
-    while (i++ < 20) {
-      mozquic_IO(connection_transport_pol_);
-    }
-    if (!acceptor_) {
-      mozquic_shutdown_connection(connection_transport_pol_);
-      mozquic_destroy_connection(connection_transport_pol_);
-    }
+  if (connection_transport_pol_ && !acceptor_) {
+    mozquic_shutdown_connection(connection_transport_pol_);
+    mozquic_destroy_connection(connection_transport_pol_);
   }
 }
 
@@ -109,7 +100,6 @@ io::network::rw_state quic_transport::read_some
         CAF_LOG_ERROR("mozquic_IO failed");
         return io::network::rw_state::failure;
       }
-      usleep(1000);
     }
   }
   auto code = mozquic_recv(stream_,
@@ -122,6 +112,12 @@ io::network::rw_state quic_transport::read_some
     return io::network::rw_state::failure;
   }
   auto result = static_cast<size_t>(sres);
+  if (result > 0) {
+    for (int i = 0; i < result; ++i) {
+      std::cout << static_cast<char*>(buf)[i];
+    }
+    std::cout << std::endl;
+  }
   collected_ += result;
   received_bytes = collected_;
   return io::network::rw_state::success;
@@ -185,7 +181,6 @@ io::network::rw_state quic_transport::write_some(io::network::newb_base* parent)
         CAF_LOG_ERROR("mozquic_IO failed");
         return io::network::rw_state::failure;
       }
-      usleep(1000);
     }
   }
   written_ += len;
@@ -239,8 +234,11 @@ quic_transport::connect(const std::string& host, uint16_t port,
   memset(&config, 0, sizeof(mozquic_config_t));
   // handle IO manually. automatic handling not yet implemented.
   config.handleIO = 0;
+  config.ipv6 = 1;
   config.originName = host.c_str();
   config.originPort = port;
+  CAF_LOG_DEBUG("connecting to " + host + " : " + std::to_string(port));
+
   // set quic-related things
   mozquic_unstable_api1(&config, "greaseVersionNegotiation", 0, nullptr);
   mozquic_unstable_api1(&config, "tolerateBadALPN", 1, nullptr);
@@ -262,13 +260,12 @@ quic_transport::connect(const std::string& host, uint16_t port,
   // trigger until connected
   uint32_t i=0;
   do {
-    usleep (1000);
-    auto code = mozquic_IO(connection_transport_pol_);
-    if (code != MOZQUIC_OK) {
+    if (MOZQUIC_OK != mozquic_IO(connection_transport_pol_)) {
       CAF_LOG_ERROR("mozquic_IO failed");
       break;
     }
-  } while (++i < 2000 && !closure_.connected);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  } while (++i < 20000 && !closure_.connected);
   if (!closure_.connected) {
     CAF_LOG_ERROR("connect failed");
     return sec::cannot_connect_to_node;

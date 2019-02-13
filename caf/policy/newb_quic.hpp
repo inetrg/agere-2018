@@ -33,7 +33,7 @@
 namespace caf {
 namespace policy {
 
-const int trigger_threshold = 2;
+const int trigger_threshold = 1000;
 
 class quic_transport : public transport {
 public:
@@ -135,18 +135,20 @@ public:
       CAF_LOG_ERROR("start_server failed");
       return sec::runtime_error;
     }
-    for (int i = 0; i < trigger_threshold; ++i) {
+
+    // prev trigger thresh
+    for (int i = 0; i < 200; ++i) {
       if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
         CAF_LOG_ERROR("mozquic_IO failed");
         return sec::runtime_error;
       }
-      usleep(1000);
     }
     return mozquic_osfd(connection_accept_pol_);
   }
 
   void accept_connection(io::network::acceptor_base* base) {
     CAF_LOG_TRACE("");
+    CAF_LOG_DEBUG((closure_.new_streams.empty() ? "new_streams empty" : "new streams NOT empty"));
     // create newb with new connection_transport_pol
     for (auto stream : closure_.new_streams) {
       // only accept *new* streams
@@ -166,7 +168,6 @@ public:
     CAF_LOG_TRACE("");
     using namespace io::network;
     for (int i = 0; i < trigger_threshold; ++i) {
-      usleep(1000);
       if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
         CAF_LOG_ERROR("mozquic_IO failed");
       }
@@ -183,7 +184,6 @@ public:
     }
     // trigger IO some more after read/write
     for (int i = 0; i < trigger_threshold; ++i) {
-      usleep(1000);
       if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
         CAF_LOG_ERROR("mozquic_IO failed");
       }
@@ -199,7 +199,6 @@ public:
       ref.write_event();
     }
     for (int i = 0; i < trigger_threshold; ++i) {
-      usleep(1000);
       if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
         CAF_LOG_ERROR("mozquic_IO failed");
         return sec::runtime_error;
@@ -224,16 +223,6 @@ public:
       mozquic_end_stream(stream);
     }
     streams_.clear();
-    // pass close messages
-    if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-      CAF_LOG_ERROR("mozquic_IO failed");
-    }
-    for (int i = 0; i < trigger_threshold; ++i) {
-      usleep(1000);
-      if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
-        CAF_LOG_ERROR("mozquic_IO failed");
-      }
-    }
     // shutdown connection
     mozquic_shutdown_connection(connection_accept_pol_);
     mozquic_destroy_connection(connection_accept_pol_);
