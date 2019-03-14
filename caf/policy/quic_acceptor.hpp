@@ -59,7 +59,6 @@ public:
   void shutdown(io::network::acceptor_base*, io::network::native_socket) override;
 };
 
-// was a generic protocol before - but written out!
 template <class T>
 using quic_protocol = generic_protocol<T>;
 

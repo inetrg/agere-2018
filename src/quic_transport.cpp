@@ -98,6 +98,7 @@ io::network::rw_state quic_transport::read_some
     for (int i = 0; i < trigger_threshold; ++i) {
       if (MOZQUIC_OK != mozquic_IO(connection_transport_pol_)) {
         CAF_LOG_ERROR("mozquic_IO failed");
+        std::cerr << "mozquic_IO failed" << std::endl;
         return io::network::rw_state::failure;
       }
     }
@@ -109,15 +110,10 @@ io::network::rw_state quic_transport::read_some
                            &fin);
   if (code != MOZQUIC_OK) {
     CAF_LOG_ERROR("recv failed" << CAF_ARG(sres));
+    std::cerr << "recv failed"<< std::endl;
     return io::network::rw_state::failure;
   }
   auto result = static_cast<size_t>(sres);
-  if (result > 0) {
-    for (int i = 0; i < result; ++i) {
-      std::cout << static_cast<char*>(buf)[i];
-    }
-    std::cout << std::endl;
-  }
   collected_ += result;
   received_bytes = collected_;
   return io::network::rw_state::success;
@@ -172,6 +168,7 @@ io::network::rw_state quic_transport::write_some(io::network::newb_base* parent)
                          static_cast<uint32_t>(len), 0);
   if (res != MOZQUIC_OK) {
     CAF_LOG_ERROR("send failed");
+    std::cerr << "send failed" << std::endl;
     return io::network::rw_state::failure;
   }
   // trigger IO so data will be passed through
@@ -179,6 +176,7 @@ io::network::rw_state quic_transport::write_some(io::network::newb_base* parent)
     for (int i = 0; i < trigger_threshold; ++i) {
       if (MOZQUIC_OK != mozquic_IO(connection_transport_pol_)) {
         CAF_LOG_ERROR("mozquic_IO failed");
+        std::cerr << "mozquic_IO failed" << std::endl;
         return io::network::rw_state::failure;
       }
     }
@@ -227,6 +225,7 @@ quic_transport::connect(const std::string& host, uint16_t port,
   // check for nss_config
   if (mozquic_nss_config(const_cast<char*>(nss_config_path)) != MOZQUIC_OK) {
     CAF_LOG_ERROR("nss-config failure");
+    std::cerr << "nss-config failure" << std::endl;
     return sec::network_syscall_failed;
   }
 
@@ -237,6 +236,7 @@ quic_transport::connect(const std::string& host, uint16_t port,
   config.originName = host.c_str();
   config.originPort = port;
   CAF_LOG_DEBUG("connecting to " + host + " : " + std::to_string(port));
+  std::cout << "connecting to " + host + " : " + std::to_string(port) << std::endl;
 
   // set quic-related things
   mozquic_unstable_api1(&config, "greaseVersionNegotiation", 0, nullptr);
@@ -247,12 +247,14 @@ quic_transport::connect(const std::string& host, uint16_t port,
 
   if (MOZQUIC_OK != mozquic_new_connection(&connection_transport_pol_, &config)) {
     CAF_LOG_ERROR("cannot create new connection");
+    std::cerr << "cannot create new connection" << std::endl;
     return sec::runtime_error;
   }
   mozquic_set_event_callback(connection_transport_pol_, connectionCB_connect);
   mozquic_set_event_callback_closure(connection_transport_pol_, &closure_);
   if (mozquic_start_client(connection_transport_pol_)) {
-    CAF_LOG_ERROR("start_client failed");
+    CAF_LOG_ERROR("mozquic_start_client failed");
+    std::cerr << "mozquic_start_client failed" << std::endl;
     return sec::runtime_error;
   }
 
@@ -262,12 +264,14 @@ quic_transport::connect(const std::string& host, uint16_t port,
     auto ret = mozquic_IO(connection_transport_pol_);
     if (MOZQUIC_OK != ret) {
       CAF_LOG_ERROR("mozquic_IO failed");
+      std::cerr << "mozquic_IO failed" << std::endl;
       break;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   } while (++i < 20000 && !closure_.connected);
   if (!closure_.connected) {
     CAF_LOG_ERROR("connect failed");
+    std::cerr << "connect failed" << std::endl;
     return sec::cannot_connect_to_node;
   }
 

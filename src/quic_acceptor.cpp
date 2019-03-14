@@ -142,6 +142,7 @@ void accept_quic<Message>::accept_connection(mozquic_stream_t* stream, io::netwo
   auto en = base->create_newb(fd, std::move(trans), false);
   if (!en) {
     CAF_LOG_ERROR("could not create newb");
+    std::cerr << "could not create newb" << std::endl;
     return;
   }
   newbs_.insert(std::make_pair(stream, *en));
@@ -155,6 +156,7 @@ void accept_quic<Message>::read_event(io::network::acceptor_base* base) {
   for (int i = 0; i < trigger_threshold; ++i) {
     if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
       CAF_LOG_ERROR("mozquic_IO failed");
+      std::cerr << "mozquic_IO failed" << std::endl;
     }
   }
 
@@ -179,6 +181,7 @@ void accept_quic<Message>::read_event(io::network::acceptor_base* base) {
   for (int i = 0; i < trigger_threshold; ++i) {
     if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
       CAF_LOG_ERROR("mozquic_IO failed");
+      std::cerr << "mozquic_IO failed" << std::endl;
     }
   }
 }
@@ -196,6 +199,7 @@ error accept_quic<Message>::write_event(io::network::acceptor_base* base) {
   for (int i = 0; i < trigger_threshold; ++i) {
     if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
       CAF_LOG_ERROR("mozquic_IO failed");
+      std::cerr << "mozquic_IO failed" << std::endl;
       return sec::runtime_error;
     }
   }
