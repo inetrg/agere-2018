@@ -16,9 +16,9 @@
  * http://www.boost.org/LICENSE_1_0.txt.                                      *
  ******************************************************************************/
 
-#include "policy/newb_quic.hpp"
+#include "policy/quic_transport.hpp"
+#include "detail/mozquic_CB.h"
 #include "caf/config.hpp"
-#include "detail/mozquic_helper.hpp"
 
 #ifdef CAF_WINDOWS
 # ifndef WIN32_LEAN_AND_MEAN
@@ -86,7 +86,7 @@ quic_transport::~quic_transport() {
 }
 
 io::network::rw_state quic_transport::read_some
-(io::network::newb_base*) {
+        (io::network::newb_base*) {
   CAF_LOG_TRACE("");
   receive_buffer.resize(10);
   auto len = receive_buffer.size() - collected_;
@@ -169,7 +169,7 @@ io::network::rw_state quic_transport::write_some(io::network::newb_base* parent)
   void* buf = send_buffer.data() + written_;
   auto len = send_buffer.size() - written_;
   int res = mozquic_send(stream_, buf,
-          static_cast<uint32_t>(len), 0);
+                         static_cast<uint32_t>(len), 0);
   if (res != MOZQUIC_OK) {
     CAF_LOG_ERROR("send failed");
     return io::network::rw_state::failure;
@@ -222,7 +222,7 @@ void quic_transport::flush(io::network::newb_base* parent) {
 
 expected<io::network::native_socket>
 quic_transport::connect(const std::string& host, uint16_t port,
-                       optional<io::network::protocol::network>) {
+                        optional<io::network::protocol::network>) {
   CAF_LOG_TRACE("");
   // check for nss_config
   if (mozquic_nss_config(const_cast<char*>(nss_config_path)) != MOZQUIC_OK) {
@@ -231,10 +231,9 @@ quic_transport::connect(const std::string& host, uint16_t port,
   }
 
   mozquic_config_t config {};
-  memset(&config, 0, sizeof(mozquic_config_t));
   // handle IO manually. automatic handling not yet implemented.
   config.handleIO = 0;
-  config.ipv6 = 1;
+  config.ipv6 = 0;
   config.originName = host.c_str();
   config.originPort = port;
   CAF_LOG_DEBUG("connecting to " + host + " : " + std::to_string(port));
@@ -260,7 +259,8 @@ quic_transport::connect(const std::string& host, uint16_t port,
   // trigger until connected
   uint32_t i=0;
   do {
-    if (MOZQUIC_OK != mozquic_IO(connection_transport_pol_)) {
+    auto ret = mozquic_IO(connection_transport_pol_);
+    if (MOZQUIC_OK != ret) {
       CAF_LOG_ERROR("mozquic_IO failed");
       break;
     }

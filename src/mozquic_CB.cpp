@@ -11,7 +11,7 @@ int connectionCB(void* closure, uint32_t event, void* param) {
     // save new stream_ for
     case MOZQUIC_EVENT_NEW_STREAM_DATA:
       CAF_LOG_DEBUG("MOZQUIC_EVENT_NEW_STREAM_DATA");
-      clo->new_streams.insert(param);
+      clo->new_data_streams.emplace_back(param);
       break;
 
     // only server side should use this.
@@ -21,11 +21,11 @@ int connectionCB(void* closure, uint32_t event, void* param) {
       mozquic_set_event_callback_closure(param, closure);
       break;
 
-    case MOZQUIC_EVENT_CLOSE_CONNECTION:
-      CAF_LOG_DEBUG("MOZQUIC_EVENT_CLOSE_CONNECTION");
-      [[clang::fallthrough]];
     case MOZQUIC_EVENT_ERROR:
       CAF_LOG_DEBUG("MOZQUIC_EVENT_ERROR");
+      [[clang::fallthrough]];
+    case MOZQUIC_EVENT_CLOSE_CONNECTION:
+      CAF_LOG_DEBUG("MOZQUIC_EVENT_CLOSE_CONNECTION");
       mozquic_destroy_connection(param);
       return MOZQUIC_ERR_GENERAL;
 

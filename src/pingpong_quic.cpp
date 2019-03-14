@@ -4,7 +4,9 @@
 #include "caf/detail/call_cfun.hpp"
 #include "caf/io/newb.hpp"
 #include "caf/logger.hpp"
-#include "../caf/policy/newb_quic.hpp"
+#include "policy/quic_acceptor.hpp"
+#include "quic_acceptor.cpp" // needed for linker because of templates
+#include "policy/quic_transport.hpp"
 #include "caf/policy/newb_raw.hpp"
 #include "caf/io/broker.hpp"
 
@@ -156,8 +158,8 @@ namespace {
 
     class config : public actor_system_config {
     public:
-        uint16_t port = 12345;
-        std::string host = "localhost";
+        uint16_t port = 44444;
+        std::string host = "localhost";//"127.0.0.1";
         bool is_server = false;
         size_t messages = 2000;
         bool traditional = false;
@@ -188,7 +190,7 @@ namespace {
       };
       if (!cfg.traditional) {
         if (cfg.is_server) {
-          std::cerr << "creating server" << std::endl;
+          std::cerr << "creating server on port " << cfg.port << std::endl;
           accept_ptr<policy::new_raw_msg> pol{new accept_quic<policy::new_raw_msg>};
           auto eserver = spawn_server<proto_t>(sys, raw_server, std::move(pol), port,
                                               nullptr, true, self);

@@ -10,12 +10,12 @@
 
 constexpr char nss_config_path[] =
                 "/home/jakob/CLionProjects/agere-2018/nss-config/";
-
+constexpr int trigger_threshold = 10;
 
 int connectionCB(void* closure, uint32_t event, void* param);
 int connectionCB_connect(void *closure, uint32_t event, void *param);
 
 struct mozquic_closure {
-  std::set<mozquic_stream_t*> new_streams;
+  std::vector<mozquic_stream_t*> new_data_streams;
   bool connected = false;
 };

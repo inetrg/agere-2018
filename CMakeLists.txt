@@ -128,23 +128,22 @@ add(src pingpong_tcp)
 add(src pp_tcp_pure)
 
 add_executable(pingpong_quic
-        src/pingpong_quic.cpp
-        src/newb_quic.cpp
-        caf/policy/newb_quic.hpp
-  caf/detail/mozquic_helper.hpp
-  caf/detail/mozquic_CB.h
-        src/mozquic_CB.cpp)
+  src/pingpong_quic.cpp
+  src/quic_acceptor.cpp
+  src/quic_transport.cpp
+  src/mozquic_CB.cpp
+)
 
 target_link_libraries(
-        pingpong_quic
-        ${CMAKE_DL_LIBS}
-        ${CAF_LIBRARY_IO}
-        ${CAF_LIBRARY_CORE}
-        ${BENCHMARK_LIBRARIES}
-        ${NSS_LIBRARIES}
-        ${NSPR_LIBRARIES}
-        ${MOZQUIC_LIBRARIES}
-        -lstdc++
+  pingpong_quic
+  ${CMAKE_DL_LIBS}
+  ${CAF_LIBRARY_IO}
+  ${CAF_LIBRARY_CORE}
+  ${BENCHMARK_LIBRARIES}
+  ${NSS_LIBRARIES}
+  ${NSPR_LIBRARIES}
+  ${MOZQUIC_LIBRARIES}
+  -lstdc++
 )
 
 add_dependencies(pingpong_quic newb_measurements)
