@@ -41,6 +41,7 @@ private:
   mozquic_closure closure_;
   mozquic_connection_t* connection_accept_pol_;
   std::map<mozquic_stream_t*, actor> newbs_;
+  int streams_;
 
 public:
   accept_quic();
@@ -55,6 +56,8 @@ public:
   void read_event(io::network::acceptor_base* base) override;
 
   error write_event(io::network::acceptor_base* base) override;
+
+  void init(io::network::acceptor_base*, io::newb<Message>& spawned) override;
 
   void shutdown(io::network::acceptor_base*, io::network::native_socket) override;
 };

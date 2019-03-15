@@ -10,8 +10,11 @@ elif [ "$(uname)" == "FreeBSD" ]; then
 elif [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
   cores=$(nproc --all)
 fi
-
 echo "Using $cores cores for compilation."
+
+# force use of clang to build the project
+export CC=/usr/bin/clang
+export CXX=/usr/bin/clang++
 
 echo "Building CAF"
 # This only works with newer git versions:

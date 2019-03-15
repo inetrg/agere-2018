@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(newb_measurements C CXX)
-set(CMAKE_C_COMPILER clang)
-set(CMAKE_CXX_COMPILER clang++)
 
 set (CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 

@@ -235,8 +235,10 @@ quic_transport::connect(const std::string& host, uint16_t port,
   config.ipv6 = 0;
   config.originName = host.c_str();
   config.originPort = port;
-  CAF_LOG_DEBUG("connecting to " + host + " : " + std::to_string(port));
-  std::cout << "connecting to " + host + " : " + std::to_string(port) << std::endl;
+  CAF_LOG_DEBUG("connecting to " + std::string(config.originName) + " : "
+                + std::to_string(config.originPort));
+  std::cout << "connecting to " + std::string(config.originName) + " : "
+               + std::to_string(config.originPort) << std::endl;
 
   // set quic-related things
   mozquic_unstable_api1(&config, "greaseVersionNegotiation", 0, nullptr);
@@ -250,7 +252,8 @@ quic_transport::connect(const std::string& host, uint16_t port,
     std::cerr << "cannot create new connection" << std::endl;
     return sec::runtime_error;
   }
-  mozquic_set_event_callback(connection_transport_pol_, connectionCB_connect);
+  mozquic_set_event_callback(connection_transport_pol_,
+                             mozquic_connectionCB_client);
   mozquic_set_event_callback_closure(connection_transport_pol_, &closure_);
   if (mozquic_start_client(connection_transport_pol_)) {
     CAF_LOG_ERROR("mozquic_start_client failed");
@@ -258,8 +261,8 @@ quic_transport::connect(const std::string& host, uint16_t port,
     return sec::runtime_error;
   }
 
-  // trigger until connected
-  uint32_t i=0;
+  // trigger for 10 seconds or until connected.
+  auto i = 0;
   do {
     auto ret = mozquic_IO(connection_transport_pol_);
     if (MOZQUIC_OK != ret) {
@@ -267,8 +270,8 @@ quic_transport::connect(const std::string& host, uint16_t port,
       std::cerr << "mozquic_IO failed" << std::endl;
       break;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  } while (++i < 20000 && !closure_.connected);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  } while (++i < 10000 && !closure_.connected);
   if (!closure_.connected) {
     CAF_LOG_ERROR("connect failed");
     std::cerr << "connect failed" << std::endl;

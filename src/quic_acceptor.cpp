@@ -67,7 +67,8 @@ namespace policy {
 template <class Message>
 accept_quic<Message>::accept_quic() :
   accept<Message>(true),
-  connection_accept_pol_{nullptr} {
+  connection_accept_pol_{nullptr},
+  streams_(0) {
     // nop
 }
 
@@ -97,7 +98,7 @@ accept_quic<Message>::create_socket(uint16_t port, const char*, bool) {
   config.originPort = port;
   config.handleIO = 0;
   config.appHandlesLogging = 0;
-  config.ipv6 = 0;
+  config.ipv6 = 1;
   mozquic_unstable_api1(&config, "tolerateBadALPN", 1, nullptr);
   mozquic_unstable_api1(&config, "tolerateNoTransportParams", 1, nullptr);
   mozquic_unstable_api1(&config, "sabotageVN", 0, nullptr);
@@ -112,7 +113,8 @@ accept_quic<Message>::create_socket(uint16_t port, const char*, bool) {
     std::cerr << "create new connection failed" << std::endl;
     return sec::runtime_error;
   }
-  mozquic_set_event_callback(connection_accept_pol_, connectionCB);
+  mozquic_set_event_callback(connection_accept_pol_,
+                             mozquic_connection_CB_server);
   mozquic_set_event_callback_closure(connection_accept_pol_, &closure_);
   if (MOZQUIC_OK != mozquic_start_server(connection_accept_pol_)) {
     CAF_LOG_ERROR("start_server failed");
@@ -121,18 +123,20 @@ accept_quic<Message>::create_socket(uint16_t port, const char*, bool) {
   }
 
   // prev trigger thresh
-  for (int i = 0; i < 200; ++i) {
+  for (int i = 0; i < trigger_threshold; ++i) {
     if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
       CAF_LOG_ERROR("mozquic_IO failed");
       std::cerr << "mozquic_IO failed" << std::endl;
       return sec::runtime_error;
     }
   }
+  std::cout << "socket_fd = " << mozquic_osfd(connection_accept_pol_) << std::endl;
   return mozquic_osfd(connection_accept_pol_);
 }
 
 template <class Message>
-void accept_quic<Message>::accept_connection(mozquic_stream_t* stream, io::network::acceptor_base* base) {
+void accept_quic<Message>::accept_connection(mozquic_stream_t* stream,
+        io::network::acceptor_base* base) {
   CAF_LOG_TRACE("");
   // create newb with new connection_transport_pol
   auto fd = mozquic_osfd(connection_accept_pol_);
@@ -152,6 +156,7 @@ template <class Message>
 void accept_quic<Message>::read_event(io::network::acceptor_base* base) {
   CAF_LOG_TRACE("");
   using namespace io::network;
+  std::cout << "read_event called" << std::endl;
   // trigger IO to get incoming events
   for (int i = 0; i < trigger_threshold; ++i) {
     if (MOZQUIC_OK != mozquic_IO(connection_accept_pol_)) {
@@ -164,6 +169,7 @@ void accept_quic<Message>::read_event(io::network::acceptor_base* base) {
   for (const auto& stream : closure_.new_data_streams) {
     // is key contained in map?
     if (newbs_.count(stream)) { // TODO: isn't there a better way?
+      std::cout << "stream exists. Calling newb" << std::endl;
       // incoming data on existing newb
       auto& act = newbs_.at(stream);
       auto ptr = caf::actor_cast<caf::abstract_actor*>(act);
@@ -171,7 +177,9 @@ void accept_quic<Message>::read_event(io::network::acceptor_base* base) {
       auto &ref = dynamic_cast<io::newb<Message>&>(*ptr);
       ref.read_event();
     } else {
+      std::cout << "stream doesn't exist. creating newbfor it." << std::endl;
       accept_connection(stream, base);
+      std::cout << "streams_ = " << ++streams_ << std::endl;
     }
   }
   closure_.new_data_streams.clear();
@@ -223,6 +231,11 @@ void accept_quic<Message>::shutdown(io::network::acceptor_base*, io::network::na
   mozquic_shutdown_connection(connection_accept_pol_);
   mozquic_destroy_connection(connection_accept_pol_);
   connection_accept_pol_ = nullptr;
+}
+
+template <class Message>
+void accept_quic<Message>::init(io::network::acceptor_base*, io::newb<Message>& spawned) {
+  spawned.start();
 }
 
 } // namespace policy

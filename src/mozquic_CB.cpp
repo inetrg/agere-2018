@@ -4,20 +4,26 @@
 
 #include "mozquic_CB.h"
 
-int connectionCB(void* closure, uint32_t event, void* param) {
+int mozquic_connection_CB_server(void* closure, uint32_t event, void* param) {
   CAF_LOG_TRACE("");
   auto clo = static_cast<mozquic_closure*>(closure);
   switch (event) {
     // save new stream_ for
-    case MOZQUIC_EVENT_NEW_STREAM_DATA:
+    case MOZQUIC_EVENT_NEW_STREAM_DATA: {
+      mozquic_stream_t* stream = param;
+      int id = mozquic_get_streamid(stream);
+      if (id >= 128) {
+        return MOZQUIC_ERR_GENERAL;
+      }
       CAF_LOG_DEBUG("MOZQUIC_EVENT_NEW_STREAM_DATA");
-      clo->new_data_streams.emplace_back(param);
+      clo->new_data_streams.emplace_back(stream);
       break;
+    }
 
     // only server side should use this.
     case MOZQUIC_EVENT_ACCEPT_NEW_CONNECTION:
       CAF_LOG_DEBUG("MOZQUIC_EVENT_ACCEPT_NEW_CONNECTION");
-      mozquic_set_event_callback(param, connectionCB);
+      mozquic_set_event_callback(param, mozquic_connection_CB_server);
       mozquic_set_event_callback_closure(param, closure);
       break;
 
@@ -35,7 +41,7 @@ int connectionCB(void* closure, uint32_t event, void* param) {
   return MOZQUIC_OK;
 }
 
-int connectionCB_connect(void* closure, uint32_t event, void*) {
+int mozquic_connectionCB_client(void* closure, uint32_t event, void*) {
   CAF_LOG_TRACE("");
   auto clo = static_cast<mozquic_closure*>(closure);
   switch (event) {
