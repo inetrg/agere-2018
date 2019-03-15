@@ -2,6 +2,8 @@
 // Created by boss on 9/28/18.
 //
 
+#include <detail/mozquic_CB.h>
+
 #include "mozquic_CB.h"
 
 int mozquic_connection_CB_server(void* closure, uint32_t event, void* param) {
@@ -55,6 +57,17 @@ int mozquic_connectionCB_client(void* closure, uint32_t event, void*) {
 
     default:
       break;
+  }
+  return MOZQUIC_OK;
+}
+
+int trigger_IO(mozquic_connection_t* conn) {
+  CAF_LOG_TRACE("");
+  for (int i = 0; i < trigger_threshold; ++i) {
+    auto ret = mozquic_IO(conn);
+    if (MOZQUIC_OK != ret) {
+      return ret;
+    }
   }
   return MOZQUIC_OK;
 }

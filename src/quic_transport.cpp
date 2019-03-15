@@ -95,12 +95,9 @@ io::network::rw_state quic_transport::read_some
   auto fin = 0;
   // trigger connection_accept_pol to get incoming data for recv
   if (connection_transport_pol_) {
-    for (int i = 0; i < trigger_threshold; ++i) {
-      if (MOZQUIC_OK != mozquic_IO(connection_transport_pol_)) {
-        CAF_LOG_ERROR("mozquic_IO failed");
-        std::cerr << "mozquic_IO failed" << std::endl;
-        return io::network::rw_state::failure;
-      }
+    if (MOZQUIC_OK != trigger_IO(connection_transport_pol_)) {
+      CAF_LOG_ERROR("mozquic_IO failed");
+      return io::network::rw_state::failure;
     }
   }
   auto code = mozquic_recv(stream_,
@@ -110,7 +107,6 @@ io::network::rw_state quic_transport::read_some
                            &fin);
   if (code != MOZQUIC_OK) {
     CAF_LOG_ERROR("recv failed" << CAF_ARG(sres));
-    std::cerr << "recv failed"<< std::endl;
     return io::network::rw_state::failure;
   }
   auto result = static_cast<size_t>(sres);
@@ -168,17 +164,13 @@ io::network::rw_state quic_transport::write_some(io::network::newb_base* parent)
                          static_cast<uint32_t>(len), 0);
   if (res != MOZQUIC_OK) {
     CAF_LOG_ERROR("send failed");
-    std::cerr << "send failed" << std::endl;
     return io::network::rw_state::failure;
   }
   // trigger IO so data will be passed through
   if (connection_transport_pol_) {
-    for (int i = 0; i < trigger_threshold; ++i) {
-      if (MOZQUIC_OK != mozquic_IO(connection_transport_pol_)) {
-        CAF_LOG_ERROR("mozquic_IO failed");
-        std::cerr << "mozquic_IO failed" << std::endl;
-        return io::network::rw_state::failure;
-      }
+    if (MOZQUIC_OK != trigger_IO(connection_transport_pol_)) {
+      CAF_LOG_ERROR("mozquic_IO failed");
+      return io::network::rw_state::failure;
     }
   }
   written_ += len;
@@ -225,7 +217,6 @@ quic_transport::connect(const std::string& host, uint16_t port,
   // check for nss_config
   if (mozquic_nss_config(const_cast<char*>(nss_config_path)) != MOZQUIC_OK) {
     CAF_LOG_ERROR("nss-config failure");
-    std::cerr << "nss-config failure" << std::endl;
     return sec::network_syscall_failed;
   }
 
@@ -237,8 +228,6 @@ quic_transport::connect(const std::string& host, uint16_t port,
   config.originPort = port;
   CAF_LOG_DEBUG("connecting to " + std::string(config.originName) + " : "
                 + std::to_string(config.originPort));
-  std::cout << "connecting to " + std::string(config.originName) + " : "
-               + std::to_string(config.originPort) << std::endl;
 
   // set quic-related things
   mozquic_unstable_api1(&config, "greaseVersionNegotiation", 0, nullptr);
@@ -249,7 +238,6 @@ quic_transport::connect(const std::string& host, uint16_t port,
 
   if (MOZQUIC_OK != mozquic_new_connection(&connection_transport_pol_, &config)) {
     CAF_LOG_ERROR("cannot create new connection");
-    std::cerr << "cannot create new connection" << std::endl;
     return sec::runtime_error;
   }
   mozquic_set_event_callback(connection_transport_pol_,
@@ -257,7 +245,6 @@ quic_transport::connect(const std::string& host, uint16_t port,
   mozquic_set_event_callback_closure(connection_transport_pol_, &closure_);
   if (mozquic_start_client(connection_transport_pol_)) {
     CAF_LOG_ERROR("mozquic_start_client failed");
-    std::cerr << "mozquic_start_client failed" << std::endl;
     return sec::runtime_error;
   }
 
@@ -267,20 +254,22 @@ quic_transport::connect(const std::string& host, uint16_t port,
     auto ret = mozquic_IO(connection_transport_pol_);
     if (MOZQUIC_OK != ret) {
       CAF_LOG_ERROR("mozquic_IO failed");
-      std::cerr << "mozquic_IO failed" << std::endl;
       break;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
-  } while (++i < 10000 && !closure_.connected);
+  } while (++i < 1000 && !closure_.connected);
   if (!closure_.connected) {
     CAF_LOG_ERROR("connect failed");
-    std::cerr << "connect failed" << std::endl;
     return sec::cannot_connect_to_node;
   }
 
   // start new stream_ for this transport.
   mozquic_start_new_stream(&stream_, connection_transport_pol_, 0, 0,
                            const_cast<char*>(""), 0, 0);
+  if (MOZQUIC_OK != trigger_IO(connection_transport_pol_)) {
+    CAF_LOG_ERROR("mozquic_IO failed");
+    return io::network::invalid_native_socket;
+  }
   return mozquic_osfd(connection_transport_pol_);
 }
 
