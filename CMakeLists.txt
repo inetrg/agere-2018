@@ -133,6 +133,7 @@ include_directories(caf/detail)
 include_directories(caf/policy)
 
 add_executable(pingpong_quicly
+               src/newb_quicly.cpp
                src/quicly_stuff.cpp
                src/pingpong_quicly.cpp)
 

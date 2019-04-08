@@ -4,7 +4,7 @@
 #include "caf/detail/call_cfun.hpp"
 #include "caf/io/newb.hpp"
 #include "caf/logger.hpp"
-#include "caf/policy/newb_tcp.hpp"
+#include "caf/policy/newb_quicly.hpp"
 #include "caf/policy/newb_raw.hpp"
 #include "caf/io/broker.hpp"
 
@@ -190,7 +190,7 @@ void caf_main(actor_system& sys, const config& cfg) {
   if (!cfg.traditional) {
     if (cfg.is_server) {
       std::cerr << "creating server" << std::endl;
-      accept_ptr<policy::new_raw_msg> pol{new accept_tcp<policy::new_raw_msg>};
+      accept_ptr<policy::new_raw_msg> pol{new accept_quicly<policy::new_raw_msg>};
       auto eserver = make_server<proto_t>(sys, raw_server, std::move(pol), port,
                                           nullptr, true, self);
       if (!eserver) {
@@ -204,7 +204,7 @@ void caf_main(actor_system& sys, const config& cfg) {
       std::this_thread::sleep_for(std::chrono::seconds(1));
     } else {
       std::cerr << "creating client" << std::endl;
-      transport_ptr pol{new tcp_transport};
+      transport_ptr pol{new quicly_transport};
       auto eclient = spawn_client<proto_t>(sys, raw_client, std::move(pol),
                                            host, port);
       if (!eclient) {
