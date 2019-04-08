@@ -13,3 +13,12 @@ figs/*.pdf
 __pycache__/
 *.py[cod]
 *$py.class
+
+### CLion ###
+.idea/
+cmake-build-debug/
+
+### libs ###
+picotls/
+quicly/
+

@@ -68,6 +68,30 @@ if (CAF_FOUND)
   include_directories(${CAF_INCLUDE_DIRS})
 endif ()
 
+# find necessary libraries
+find_package(OpenSSL REQUIRED)
+if (OPENSSL_FOUND)
+  include_directories(${OPENSSL_INCLUDE_DIR})
+else ()
+  message(FATAL_ERROR "could not find OpenSSL")
+endif ()
+
+find_package(PTLS REQUIRED)
+if (PTLS_FOUND)
+  include_directories(${PTLS_INCLUDE_DIRS})
+  message(STATUS "PTLS_INCLUDE_DIRS: ${PTLS_INCLUDE_DIRS}")
+  message(STATUS "PTLS_LIBRARIES: ${PTLS_LIBRARIES}")
+endif ()
+
+if (NOT QUICLY_ROOT_DIR)
+  set(QUICLY_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/quicly")
+endif()
+find_package(Quicly REQUIRED)
+if (QUICLY_FOUND)
+  include_directories(${QUICLY_INCLUDE_DIRS})
+  message(STATUS "QUICLY_INCLUDE_DIRS: ${QUICLY_INCLUDE_DIRS}")
+endif()
+
 #set(THREADS_PREFER_PTHREAD_FLAG ON)
 #find_package(Threads REQUIRED)
 
@@ -103,3 +127,21 @@ add(src layers)
 add(src pingpong_udp)
 add(src pingpong_tcp)
 add(src pp_tcp_pure)
+
+include_directories(caf)
+include_directories(caf/detail)
+include_directories(caf/policy)
+
+add_executable(pingpong_quicly
+               src/quicly_stuff.cpp
+               src/pingpong_quicly.cpp)
+
+target_link_libraries(pingpong_quicly
+                      ${CMAKE_DL_LIBS}
+                      ${CAF_LIBRARY_IO}
+                      ${CAF_LIBRARY_CORE}
+                      ${BENCHMARK_LIBRARIES}
+                      ${CMAKE_THREAD_LIBS_INIT}
+                      ${QUICLY_LIBRARIES}
+                      ${PTLS_LIBRARIES}
+                      ${OPENSSL_LIBRARIES})
