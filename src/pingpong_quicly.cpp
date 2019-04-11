@@ -4,7 +4,7 @@
 #include "caf/detail/call_cfun.hpp"
 #include "caf/io/newb.hpp"
 #include "caf/logger.hpp"
-#include "caf/policy/newb_quicly.hpp"
+#include "newb_quicly.hpp"
 #include "caf/policy/newb_raw.hpp"
 #include "caf/io/broker.hpp"
 
@@ -29,7 +29,7 @@ struct state {
 };
 
 
-behavior tcp_server(stateful_broker<state>* self) {
+behavior server(stateful_broker<state>* self) {
   return {
           [=](actor responder) {
               self->state.responder = responder;
@@ -55,7 +55,7 @@ behavior tcp_server(stateful_broker<state>* self) {
   };
 }
 
-behavior tcp_client(stateful_broker<state>* self, connection_handle hdl) {
+behavior client(stateful_broker<state>* self, connection_handle hdl) {
   self->state.other = hdl;
   return {
           [=](start_atom, size_t messages, actor responder) {
@@ -174,8 +174,7 @@ public:
 
 void caf_main(actor_system& sys, const config& cfg) {
   using namespace std::chrono;
-  using proto_t = tcp_protocol<raw>;
-  //using acceptor_t = tcp_acceptor<proto_t>;
+  using proto_t = quicly_protocol<raw>;
   const char* host = cfg.host.c_str();
   const uint16_t port = cfg.port;
   scoped_actor self{sys};
@@ -189,10 +188,10 @@ void caf_main(actor_system& sys, const config& cfg) {
   };
   if (!cfg.traditional) {
     if (cfg.is_server) {
-      std::cerr << "creating server" << std::endl;
+      std::cerr << "creating server on port " << cfg.port << std::endl;
       accept_ptr<policy::new_raw_msg> pol{new accept_quicly<policy::new_raw_msg>};
-      auto eserver = make_server<proto_t>(sys, raw_server, std::move(pol), port,
-                                          nullptr, true, self);
+      auto eserver = spawn_server<proto_t>(sys, raw_server, std::move(pol), port,
+                                           nullptr, true, self);
       if (!eserver) {
         std::cerr << "failed to start server on port " << port << std::endl;
         return;
@@ -200,7 +199,7 @@ void caf_main(actor_system& sys, const config& cfg) {
       auto server = std::move(*eserver);
       await_done("done");
       std::cerr << "stopping server" << std::endl;
-      server->stop();
+      self->send_exit(server, caf::exit_reason::user_shutdown);
       std::this_thread::sleep_for(std::chrono::seconds(1));
     } else {
       std::cerr << "creating client" << std::endl;
@@ -225,12 +224,12 @@ void caf_main(actor_system& sys, const config& cfg) {
   } else {
     if (cfg.is_server) {
       std::cerr << "creating traditional server" << std::endl;
-      auto es = sys.middleman().spawn_server(tcp_server, port);
+      auto es = sys.middleman().spawn_server(server, port);
       self->send(*es, actor_cast<actor>(self));
       await_done("done");
     } else {
       std::cerr << "creating traditional client" << std::endl;
-      auto ec = sys.middleman().spawn_client(tcp_client, host, port);
+      auto ec = sys.middleman().spawn_client(client, host, port);
       auto start = system_clock::now();
       self->send(*ec, start_atom::value, size_t(cfg.messages),
                  actor_cast<actor>(self));

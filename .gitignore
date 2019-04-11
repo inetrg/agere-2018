@@ -18,6 +18,9 @@ __pycache__/
 .idea/
 cmake-build-debug/
 
+### vscode ###
+.vscode/
+
 ### libs ###
 picotls/
 quicly/
