@@ -67,16 +67,9 @@ namespace policy {
 
 quicly_transport::quicly_transport()
         : cid_key_(nullptr),
-          sa_(),
           salen_(0),
-          next_cid_(),
-          hs_properties_(),
-          resumed_transport_params_(),
           closed_by_peer_{&on_closed_by_peer},
-          stream_open_{},
           save_ticket_{&save_ticket_cb},
-          key_exchanges_(),
-          tlsctx_(),
           conn_(nullptr),
           fd_(-1),
           read_threshold{1},
@@ -85,11 +78,11 @@ quicly_transport::quicly_transport()
           writing{false},
           written{0} {
   configure_read(io::receive_policy::at_most(1024));
+  stream_open_.state = this;
   stream_open_.cb = [](quicly_stream_open_t* self, quicly_stream_t* stream) -> int {
     auto tmp = static_cast<quicly_stream_open_state*>(self);
     return tmp->state->on_stream_open(self, stream);
   };
-  stream_open_.state = this;
 }
 
 io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent) {
@@ -110,18 +103,16 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
   mess.msg_iovlen = 1;
   ssize_t rret;
   while ((rret = recvmsg(fd_, &mess, 0)) <= 0);
-  size_t off = 0;
+  ssize_t off = 0;
   while (off != rret) {
     quicly_decoded_packet_t packet;
-    size_t plen = quicly_decode_packet(&ctx, &packet, msgbuf + off, rret - off);
+    size_t plen = quicly_decode_packet(&ctx, &packet, msgbuf + off,
+                                       static_cast<size_t>(rret - off));
     if (plen == SIZE_MAX)
       break;
     quicly_receive(conn_, &packet);
     off += plen;
   }
-
-  // TODO here should be the part where on_receive was called -> I should be able to
-  // TODO get received data from the buf.
 
   if (conn_ != nullptr) {
     if (send_pending(fd_, conn_) != 0) {
@@ -301,7 +292,7 @@ int quicly_transport::on_stream_open(quicly_stream_open_t*,
   if ((ret = quicly_streambuf_create(stream, sizeof(quicly_streambuf_t))) != 0)
     return ret;
   stream->callbacks = &stream_callbacks;
-  stream->data = this;
+  stream->data = this; // ptr to access receive_buffer from callback
   return 0;
 }
 
@@ -317,7 +308,7 @@ int quicly_transport::on_receive(quicly_stream_t* stream, size_t off,
   if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
     trans->receive_buffer.resize(input.len);
     std::memcpy(trans->receive_buffer.data(), input.base, input.len);
-    trans->
+    trans->received_bytes += input.len;
     quicly_streambuf_ingress_shift(stream, input.len);
   }
 

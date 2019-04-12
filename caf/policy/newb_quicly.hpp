@@ -63,8 +63,8 @@ struct quicly_transport : public transport {
 
 private:
   // quicly callbacks
-  int on_stream_open(st_quicly_stream_open_t* self, st_quicly_stream_t* stream);
-  int on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
+  static int on_stream_open(st_quicly_stream_open_t* self, st_quicly_stream_t* stream);
+  static int on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
 
   // quicly state
   quicly_stream_callbacks_t stream_callbacks = {
@@ -72,7 +72,20 @@ private:
           quicly_streambuf_egress_shift,
           quicly_streambuf_egress_emit,
           on_stop_sending,
-          (&quicly_transport::on_receive),
+          [](quicly_stream_t *stream, size_t off, const void *src, size_t len) -> int {
+            auto trans = static_cast<quicly_transport*>(stream->data);
+            ptls_iovec_t input;
+            int ret;
+            if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
+              return ret;
+            if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
+              trans->receive_buffer.resize(input.len);
+              std::memcpy(trans->receive_buffer.data(), input.base, input.len);
+              trans->received_bytes += input.len;
+              quicly_streambuf_ingress_shift(stream, input.len);
+            }
+            return 0;
+          },
           on_receive_reset
   };
 
@@ -105,15 +118,16 @@ private:
 
 io::network::native_socket get_newb_socket(io::network::newb_base*);
 
+
+
 template <class Message>
 struct accept_quicly : public accept<Message> {
 private:
   char cid_key_[17];
-  static int fd_;
+  int fd_ = -1;
   quicly_cid_plaintext_t next_cid_;
   ptls_handshake_properties_t hs_properties_;
   quicly_closed_by_peer_t closed_by_peer_;
-  quicly_stream_open_t stream_open_;
   ptls_save_ticket_t save_ticket_;
   ptls_key_exchange_algorithm_t *key_exchanges_[128];
   ptls_context_t tlsctx_;
@@ -124,6 +138,18 @@ private:
   std::map<quicly_conn_t*, actor> newbs_;
 
 public:
+  accept_quicly() :
+    next_cid_(),
+    hs_properties_(),
+    closed_by_peer_(),
+    save_ticket_(),
+    tlsctx_(),
+    enforce_retry_(false),
+    sa_(),
+    salen_(0)
+    {
+
+    }
 
   expected<io::network::native_socket>
   create_socket(uint16_t port, const char* host, bool reuse = false) override {
@@ -298,11 +324,11 @@ public:
 private:
   static quicly_stream_callbacks_t stream_callbacks;
 
-  static int on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len) {
+  int on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len) {
     return 0;
   }
 
-  static int on_stream_open(struct st_quicly_stream_open_t* self, struct st_quicly_stream_t* stream) {
+  int on_stream_open(struct st_quicly_stream_open_t* self, struct st_quicly_stream_t* stream) {
     return 0;
   }
 };
