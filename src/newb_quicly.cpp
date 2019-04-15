@@ -65,25 +65,37 @@
 namespace caf {
 namespace policy {
 
-quicly_transport::quicly_transport()
-        : cid_key_(nullptr),
-          salen_(0),
-          closed_by_peer_{&on_closed_by_peer},
-          save_ticket_{&save_ticket_cb},
-          conn_(nullptr),
-          fd_(-1),
-          read_threshold{1},
-          collected{0},
-          maximum{0},
-          writing{false},
-          written{0} {
+quicly_transport::quicly_transport(quicly_conn_t* conn, int fd,
+                                   io::network::acceptor_base* accept)
+    : accept_(accept),
+      cid_key_(nullptr),
+      sa_(),
+      salen_(0),
+      next_cid_(),
+      hs_properties_(),
+      resumed_transport_params_(),
+      closed_by_peer_{&on_closed_by_peer},
+      stream_open_(),
+      save_ticket_{&save_ticket_cb},
+      key_exchanges_(),
+      tlsctx_(),
+      conn_(conn),
+      fd_(fd),
+      read_threshold{1},
+      collected{0},
+      maximum{0},
+      rd_flag{io::receive_policy_flag::exactly},
+      writing{false},
+      written{0} {
   configure_read(io::receive_policy::at_most(1024));
   stream_open_.state = this;
   stream_open_.cb = [](quicly_stream_open_t* self, quicly_stream_t* stream) -> int {
-    auto tmp = static_cast<quicly_stream_open_state*>(self);
+    auto tmp = static_cast<quicly_stream_open_trans*>(self);
     return tmp->state->on_stream_open(self, stream);
   };
 }
+
+quicly_transport::quicly_transport() : quicly_transport(nullptr, -1, nullptr) {}
 
 io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent) {
   CAF_LOG_TRACE("");
@@ -110,10 +122,13 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
                                        static_cast<size_t>(rret - off));
     if (plen == SIZE_MAX)
       break;
-    quicly_receive(conn_, &packet);
+    if (quicly_receive(conn_, &packet)) {
+      return io::network::rw_state::indeterminate;
+    }
     off += plen;
   }
 
+  // send ack
   if (conn_ != nullptr) {
     if (send_pending(fd_, conn_) != 0) {
       return io::network::rw_state::failure;
@@ -272,7 +287,7 @@ quicly_transport::connect(const std::string& host, uint16_t port,
     return io::network::invalid_native_socket;
   }
   ++next_cid_.master_id;
-
+  send_pending(fd_, conn_);
   return fd_;
 }
 
@@ -293,25 +308,6 @@ int quicly_transport::on_stream_open(quicly_stream_open_t*,
     return ret;
   stream->callbacks = &stream_callbacks;
   stream->data = this; // ptr to access receive_buffer from callback
-  return 0;
-}
-
-int quicly_transport::on_receive(quicly_stream_t* stream, size_t off,
-                                 const void* src, size_t len) {
-  auto trans = static_cast<quicly_transport*>(stream->data);
-  ptls_iovec_t input;
-  int ret;
-
-  if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
-    return ret;
-
-  if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
-    trans->receive_buffer.resize(input.len);
-    std::memcpy(trans->receive_buffer.data(), input.base, input.len);
-    trans->received_bytes += input.len;
-    quicly_streambuf_ingress_shift(stream, input.len);
-  }
-
   return 0;
 }
 

@@ -32,12 +32,22 @@ namespace policy {
 
 struct quicly_transport;
 
-struct quicly_stream_open_state : public quicly_stream_open_t {
+template <class Message>
+struct accept_quicly;
+
+struct quicly_stream_open_trans : public quicly_stream_open_t {
   quicly_transport* state;
 };
 
+template <class Message>
+struct quicly_stream_open_accept : public quicly_stream_open_t {
+  accept_quicly<Message>* state;
+};
+
 struct quicly_transport : public transport {
-  friend quicly_stream_open_state;
+  friend quicly_stream_open_trans;
+
+  quicly_transport(quicly_conn_t* conn, int fd, io::network::acceptor_base* accept);
 
   quicly_transport();
 
@@ -63,8 +73,7 @@ struct quicly_transport : public transport {
 
 private:
   // quicly callbacks
-  static int on_stream_open(st_quicly_stream_open_t* self, st_quicly_stream_t* stream);
-  static int on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
+  int on_stream_open(st_quicly_stream_open_t* self, st_quicly_stream_t* stream);
 
   // quicly state
   quicly_stream_callbacks_t stream_callbacks = {
@@ -81,7 +90,8 @@ private:
             if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
               trans->receive_buffer.resize(input.len);
               std::memcpy(trans->receive_buffer.data(), input.base, input.len);
-              trans->received_bytes += input.len;
+              trans->collected += input.len;
+              trans->received_bytes = trans->collected;
               quicly_streambuf_ingress_shift(stream, input.len);
             }
             return 0;
@@ -89,6 +99,7 @@ private:
           on_receive_reset
   };
 
+  io::network::acceptor_base* accept_;
   // connection info
   char* cid_key_;
   sockaddr_storage sa_;
@@ -98,7 +109,7 @@ private:
   ptls_handshake_properties_t hs_properties_;
   quicly_transport_parameters_t resumed_transport_params_;
   quicly_closed_by_peer_t closed_by_peer_;
-  quicly_stream_open_state stream_open_;
+  quicly_stream_open_trans stream_open_;
   ptls_save_ticket_t save_ticket_;
   ptls_key_exchange_algorithm_t *key_exchanges_[128];
   ptls_context_t tlsctx_;
@@ -122,6 +133,9 @@ io::network::native_socket get_newb_socket(io::network::newb_base*);
 
 template <class Message>
 struct accept_quicly : public accept<Message> {
+friend quicly_stream_open_trans;
+friend quicly_stream_callbacks_t;
+
 private:
   char cid_key_[17];
   int fd_ = -1;
@@ -131,11 +145,23 @@ private:
   ptls_save_ticket_t save_ticket_;
   ptls_key_exchange_algorithm_t *key_exchanges_[128];
   ptls_context_t tlsctx_;
-  static std::vector<quicly_conn_t*> conns_;
   bool enforce_retry_;
   sockaddr sa_;
   socklen_t salen_;
   std::map<quicly_conn_t*, actor> newbs_;
+  quicly_stream_open_accept<Message> stream_open_;
+
+  // quicly state
+  quicly_stream_callbacks_t stream_callbacks = {
+      quicly_streambuf_destroy,
+      quicly_streambuf_egress_shift,
+      quicly_streambuf_egress_emit,
+      on_stop_sending,
+      [](quicly_stream_t *stream, size_t off, const void *src, size_t len) -> int {
+        return 0;
+      },
+      on_receive_reset
+  };
 
 public:
   accept_quicly() :
@@ -148,7 +174,11 @@ public:
     sa_(),
     salen_(0)
     {
-
+      stream_open_.state = this;
+      stream_open_.cb = [](quicly_stream_open_t* self, quicly_stream_t* stream) -> int {
+        auto tmp = static_cast<quicly_stream_open_accept<Message>*>(self);
+        return tmp->state->on_stream_open(self, stream);
+      };
     }
 
   expected<io::network::native_socket>
@@ -218,7 +248,7 @@ public:
                          io::network::acceptor_base* base) {
     CAF_LOG_TRACE("");
     // create newb with new connection_transport_pol
-    transport_ptr trans{new quicly_transport(base, fd_)};
+    transport_ptr trans{new quicly_transport(conn, fd_, base)};
     trans->prepare_next_read(nullptr);
     trans->prepare_next_write(nullptr);
     auto en = base->create_newb(fd_, std::move(trans), false);
@@ -262,14 +292,9 @@ public:
       }
       quicly_conn_t *conn = nullptr;
       size_t i;
-      for (i = 0; i != conns_.size(); ++i) {
-        if (quicly_is_destination(conns_[i], &sa, salen_, &packet)) {
-          conn = conns_[i];
-          break;
-        }
-      }
-      if (conn != nullptr) {
-        /* existing connection */
+      // was connection already accepted?
+      auto newb_it  = newbs_.find(conn);
+      if (newb_it != newbs_.end()) {
         quicly_receive(conn, &packet);
       } else if (QUICLY_PACKET_IS_LONG_HEADER(packet.octets.base[0])) {
         /* new connection */
@@ -277,13 +302,11 @@ public:
                                 enforce_retry_ ? packet.token /* a production server should validate the token */
                                                : ptls_iovec_init(nullptr, 0),
                                 &next_cid_, nullptr);
-        if (ret == 0) {
-          assert(conn != nullptr);
-          ++next_cid_.master_id;
-          conns_.emplace_back(conn);
-          std::cout << "conns_.size() = " << conns_.size() << std::endl;
+        if (ret == 0 && conn) {
+            ++next_cid_.master_id;
+            accept_connection(conn, base);
         } else {
-          assert(conn == nullptr);
+          CAF_LOG_ERROR("could not accept new connection");
         }
       } else {
         /* short header packet; potentially a dead connection. No need to check the length of the incoming packet,
@@ -292,10 +315,13 @@ public:
         if (packet.cid.dest.plaintext.node_id == 0 && packet.cid.dest.plaintext.thread_id == 0) {
           quicly_datagram_t *dgram = quicly_send_stateless_reset(&ctx, &sa, salen_, packet.cid.dest.encrypted.base);
           if (send_one(fd_, dgram) == -1)
-            perror("sendmsg failed");
+            CAF_LOG_ERROR("could not send stateless reset");
         }
       }
       off += plen;
+      if (send_pending(fd_, conn)) {
+        CAF_LOG_ERROR("send_pending failed");
+      }
     }
   }
 
@@ -312,23 +338,31 @@ public:
     return none;
   }
 
-  void init(io::network::acceptor_base*, io::newb<Message>& spawned) override {
-    spawned.start();
-  }
-
   void shutdown(io::network::acceptor_base*,
                 io::network::native_socket sockfd) override {
     io::network::shutdown_both(sockfd);
   }
 
 private:
-  static quicly_stream_callbacks_t stream_callbacks;
-
-  int on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len) {
-    return 0;
-  }
-
   int on_stream_open(struct st_quicly_stream_open_t* self, struct st_quicly_stream_t* stream) {
+    // set stream callbacks for the new stream
+    int ret;
+    if ((ret = quicly_streambuf_create(stream, sizeof(quicly_streambuf_t))) != 0)
+      return ret;
+
+    auto conn_it = newbs_.find(stream->conn);
+    if (conn_it != newbs_.end()) {
+      auto ptr = caf::actor_cast<caf::abstract_actor*>(conn_it->second);
+      CAF_ASSERT(ptr != nullptr);
+      auto ref = dynamic_cast<quicly_transport*>(ptr);
+      if (ref != nullptr)
+        stream->data = ref;
+      else
+        return -1;
+      stream->callbacks = &stream_callbacks;
+    }
+
+
     return 0;
   }
 };
