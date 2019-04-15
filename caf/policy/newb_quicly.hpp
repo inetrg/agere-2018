@@ -44,10 +44,14 @@ struct quicly_stream_open_accept : public quicly_stream_open_t {
   accept_quicly<Message>* state;
 };
 
+struct transport_streambuf : public quicly_streambuf_t {
+  quicly_transport* state;
+};
+
 struct quicly_transport : public transport {
   friend quicly_stream_open_trans;
 
-  quicly_transport(quicly_conn_t* conn, int fd, io::network::acceptor_base* accept);
+  quicly_transport(quicly_conn_t* conn, int fd);
 
   quicly_transport();
 
@@ -82,7 +86,9 @@ private:
           quicly_streambuf_egress_emit,
           on_stop_sending,
           [](quicly_stream_t *stream, size_t off, const void *src, size_t len) -> int {
-            auto trans = static_cast<quicly_transport*>(stream->data);
+            std::cout << "on_receive" << std::endl;
+
+            auto trans = static_cast<transport_streambuf*>(stream->data)->state;
             ptls_iovec_t input;
             int ret;
             if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
@@ -99,7 +105,6 @@ private:
           on_receive_reset
   };
 
-  io::network::acceptor_base* accept_;
   // connection info
   char* cid_key_;
   sockaddr_storage sa_;
@@ -110,6 +115,7 @@ private:
   quicly_transport_parameters_t resumed_transport_params_;
   quicly_closed_by_peer_t closed_by_peer_;
   quicly_stream_open_trans stream_open_;
+  transport_streambuf streambuf_;
   ptls_save_ticket_t save_ticket_;
   ptls_key_exchange_algorithm_t *key_exchanges_[128];
   ptls_context_t tlsctx_;
@@ -125,6 +131,9 @@ private:
   // State for writing.
   bool writing;
   size_t written;
+
+  // state for connection
+  bool connected;
 };
 
 io::network::native_socket get_newb_socket(io::network::newb_base*);
@@ -165,6 +174,7 @@ private:
 
 public:
   accept_quicly() :
+    accept<Message>(true),
     next_cid_(),
     hs_properties_(),
     closed_by_peer_(),
@@ -182,7 +192,8 @@ public:
     }
 
   expected<io::network::native_socket>
-  create_socket(uint16_t port, const char* host, bool reuse = false) override {
+  create_socket(uint16_t port, const char* host, bool) override {
+    std::cout << "create_socket" << std::endl;
     memset(&tlsctx_, 0, sizeof(ptls_context_t));
     tlsctx_.random_bytes = ptls_openssl_random_bytes;
     tlsctx_.get_time = &ptls_get_time;
@@ -247,8 +258,9 @@ public:
   void accept_connection(quicly_conn_t* conn,
                          io::network::acceptor_base* base) {
     CAF_LOG_TRACE("");
+    std::cout << "accept connection" << std::endl;
     // create newb with new connection_transport_pol
-    transport_ptr trans{new quicly_transport(conn, fd_, base)};
+    transport_ptr trans{new quicly_transport(conn, fd_)};
     trans->prepare_next_read(nullptr);
     trans->prepare_next_write(nullptr);
     auto en = base->create_newb(fd_, std::move(trans), false);
@@ -261,6 +273,7 @@ public:
 
   void read_event(io::network::acceptor_base* base) {
     CAF_LOG_TRACE("");
+    std::cout << "read_event" << std::endl;
     uint8_t buf[4096];
     msghdr mess = {};
     sockaddr sa = {};
@@ -327,12 +340,13 @@ public:
 
   error write_event(io::network::acceptor_base* base) {
     CAF_LOG_TRACE("");
+    std::cout  << "write event" << std::endl;
     for (const auto& pair : newbs_) {
       auto& act = pair.second;
       auto ptr = caf::actor_cast<caf::abstract_actor *>(act);
       CAF_ASSERT(ptr != nullptr);
       auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
-      ref.write_event();
+      ref.write_event(base);
     }
     base->stop_writing();
     return none;
