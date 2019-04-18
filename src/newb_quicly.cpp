@@ -65,8 +65,10 @@
 namespace caf {
 namespace policy {
 
-quicly_transport::quicly_transport(quicly_conn_t* conn, int fd)
-    : cid_key_(nullptr),
+quicly_transport::quicly_transport(quicly_conn_t* conn, int fd,
+                                   io::network::acceptor_base* parent, bool connected)
+    : parent_(parent),
+      cid_key_(nullptr),
       sa_(),
       salen_(0),
       next_cid_(),
@@ -85,7 +87,7 @@ quicly_transport::quicly_transport(quicly_conn_t* conn, int fd)
       rd_flag{io::receive_policy_flag::exactly},
       writing{false},
       written{0},
-      connected(false){
+      connected(connected){
   configure_read(io::receive_policy::at_most(1024));
   stream_open_.state = this;
   stream_open_.cb = [](quicly_stream_open_t* self, quicly_stream_t* stream) -> int {
@@ -95,10 +97,12 @@ quicly_transport::quicly_transport(quicly_conn_t* conn, int fd)
   streambuf_.state = this;
 }
 
-quicly_transport::quicly_transport() : quicly_transport(nullptr, -1) {}
+quicly_transport::quicly_transport() : quicly_transport(nullptr, -1, nullptr, false) {}
 
 io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent) {
+  static int counter = 0;
   CAF_LOG_TRACE("");
+  std::cout << "read_some" << std::endl;
   uint8_t buf[4096];
   msghdr mess = {};
   sockaddr sa = {};
@@ -111,7 +115,11 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
   mess.msg_iov = &vec;
   mess.msg_iovlen = 1;
   ssize_t rret;
-  while ((rret = recvmsg(fd_, &mess, 0)) <= 0);
+  if ((rret = recvmsg(fd_, &mess, 0)) <= 0) {
+    perror("recvmsg failed");
+    return io::network::rw_state::indeterminate;
+  };
+  ++counter;
   size_t off = 0;
   while (off != rret) {
     quicly_decoded_packet_t packet;
@@ -137,16 +145,10 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
 
   if (conn_ != nullptr) {
     auto state = quicly_get_state(conn_);
-    if (state == QUICLY_STATE_CLOSING) {
-      std::cout << "QUICLY_STATE_CLOSING" << std::endl;
-    } else if (!connected && state == QUICLY_STATE_CONNECTED) {
+    if (!connected && state == QUICLY_STATE_CONNECTED) {
       std::cout << "QUICLY_STATE_CONNECTED" << std::endl;
       connected = true;
-      parent->start_writing();
-    } else if (state == QUICLY_STATE_DRAINING) {
-      std::cout << "QUICLY_STATE_DRAINING" << std::endl;
-    } else if (state == QUICLY_STATE_FIRSTFLIGHT) {
-      std::cout << "QUICLY_STATE_FIRSTFLIGHT" << std::endl;
+      flush(parent);
     }
   }
   // need some state for the callbacks to determine a shutdown
@@ -165,6 +167,13 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
   collected += result;
   received_bytes = collected;*/
   return io::network::rw_state::success;
+}
+
+void quicly_transport::take_data(ptls_iovec_t& input) {
+  receive_buffer.resize(input.len);
+  std::memcpy(receive_buffer.data(), input.base, input.len);
+  collected += input.len;
+  received_bytes = collected;
 }
 
 bool quicly_transport::should_deliver() {
@@ -205,15 +214,19 @@ void quicly_transport::configure_read(io::receive_policy::config config) {
 io::network::rw_state
 quicly_transport::write_some(io::network::newb_base* parent) {
   CAF_LOG_TRACE("");
+  std::cout << "write_some" << std::endl;
+  //std::cout << "trans->write_some" << std::endl;
   const void* buf = send_buffer.data() + written;
   auto len = send_buffer.size() - written;
 
   // open stream for this data
   quicly_stream_t* stream;
   if (quicly_open_stream(conn_, &stream, 0)) {
-    CAF_LOG_ERROR("quicly_open_stream failed");
+    std::cerr << "quicly_open_stream failed" << std::endl;
     return io::network::rw_state::failure;
   }
+
+  //std::cout << "writing " << len << " bytes" << std::endl;
 
   // send data and close stream afterwards.
   quicly_streambuf_egress_write(stream, buf, len);
@@ -230,10 +243,16 @@ quicly_transport::write_some(io::network::newb_base* parent) {
 }
 
 void quicly_transport::prepare_next_write(io::network::newb_base* parent) {
+  //std::cout << "trans->prepare_next_write" << std::endl;
   written = 0;
   send_buffer.clear();
   if (offline_buffer.empty()) {
-    parent->stop_writing();
+    if (parent_) {
+      parent_->stop_writing();
+    } else {
+      parent->stop_writing();
+    }
+
     writing = false;
   } else {
     send_buffer.swap(offline_buffer);
@@ -241,10 +260,16 @@ void quicly_transport::prepare_next_write(io::network::newb_base* parent) {
 }
 
 void quicly_transport::flush(io::network::newb_base* parent) {
+  //std::cout << "trans->flush()" << std::endl;
   CAF_ASSERT(parent != nullptr);
   CAF_LOG_TRACE(CAF_ARG(offline_buffer.size()));
   if (!offline_buffer.empty() && !writing && connected) {
-    parent->start_writing();
+    if (parent_) {
+      parent_->start_writing(); // this transport is multiplexed
+    } else {
+      parent->start_writing(); // this one isn't
+    }
+
     writing = true;
     prepare_next_write(parent);
   }
@@ -254,7 +279,7 @@ expected<io::network::native_socket>
 quicly_transport::connect(const std::string& host, uint16_t port,
                        optional<io::network::protocol::network>) {
   CAF_LOG_TRACE("");
-  std::cout << "connecting to " << host << " : " << port << std::endl;
+  //std::cout << "connecting to " << host << " : " << port << std::endl;
   memset(&tlsctx_, 0, sizeof(ptls_context_t));
   tlsctx_.random_bytes = ptls_openssl_random_bytes;
   tlsctx_.get_time = &ptls_get_time;
@@ -319,10 +344,11 @@ int quicly_transport::on_stream_open(quicly_stream_open_t*,
                                      quicly_stream_t* stream) {
   // set stream callbacks for the new stream
   int ret;
-  if ((ret = quicly_streambuf_create(stream, sizeof(quicly_streambuf_t))) != 0)
+  if ((ret = quicly_streambuf_create(stream, sizeof(transport_streambuf))) != 0)
     return ret;
   stream->callbacks = &stream_callbacks;
-  stream->data = &streambuf_; // ptr to access receive_buffer from callback
+  // set this ptr to streambuf.
+  static_cast<transport_streambuf*>(stream->data)->state = this;
   return 0;
 }
 

@@ -30,10 +30,9 @@
 namespace caf {
 namespace policy {
 
-struct quicly_transport;
-
 template <class Message>
 struct accept_quicly;
+struct quicly_transport;
 
 struct quicly_stream_open_trans : public quicly_stream_open_t {
   quicly_transport* state;
@@ -48,10 +47,15 @@ struct transport_streambuf : public quicly_streambuf_t {
   quicly_transport* state;
 };
 
+struct acceptor_streambuf : public quicly_streambuf_t {
+  protocol_base* state;
+};
+
+
 struct quicly_transport : public transport {
   friend quicly_stream_open_trans;
 
-  quicly_transport(quicly_conn_t* conn, int fd);
+  quicly_transport(quicly_conn_t* conn, int fd, io::network::acceptor_base* parent, bool connected);
 
   quicly_transport();
 
@@ -75,6 +79,8 @@ struct quicly_transport : public transport {
 
   void shutdown(io::network::newb_base*, io::network::native_socket) override;
 
+  void take_data(ptls_iovec_t& input);
+
 private:
   // quicly callbacks
   int on_stream_open(st_quicly_stream_open_t* self, st_quicly_stream_t* stream);
@@ -86,7 +92,7 @@ private:
           quicly_streambuf_egress_emit,
           on_stop_sending,
           [](quicly_stream_t *stream, size_t off, const void *src, size_t len) -> int {
-            std::cout << "on_receive" << std::endl;
+            //std::cout << "on_receive" << std::endl;
 
             auto trans = static_cast<transport_streambuf*>(stream->data)->state;
             ptls_iovec_t input;
@@ -94,16 +100,16 @@ private:
             if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
               return ret;
             if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
-              trans->receive_buffer.resize(input.len);
-              std::memcpy(trans->receive_buffer.data(), input.base, input.len);
-              trans->collected += input.len;
-              trans->received_bytes = trans->collected;
+              trans->take_data(input);
               quicly_streambuf_ingress_shift(stream, input.len);
             }
+            //std::cout << "input.len " << len << std::endl;
             return 0;
           },
           on_receive_reset
   };
+
+  io::network::acceptor_base* parent_;
 
   // connection info
   char* cid_key_;
@@ -159,6 +165,7 @@ private:
   socklen_t salen_;
   std::map<quicly_conn_t*, actor> newbs_;
   quicly_stream_open_accept<Message> stream_open_;
+  transport_streambuf streambuf_;
 
   // quicly state
   quicly_stream_callbacks_t stream_callbacks = {
@@ -167,6 +174,20 @@ private:
       quicly_streambuf_egress_emit,
       on_stop_sending,
       [](quicly_stream_t *stream, size_t off, const void *src, size_t len) -> int {
+        //std::cout << "server_on_receive" << std::endl;
+        auto proto = static_cast<acceptor_streambuf*>(stream->data)->state;
+        ptls_iovec_t input;
+        int ret;
+        if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0) {
+          return ret;
+        }
+        if ((input = quicly_streambuf_ingress_get(stream)).len > 0) {
+          // pass data to protocol
+          proto->read(reinterpret_cast<char*>(input.base), input.len);
+          quicly_streambuf_ingress_shift(stream, input.len);
+        }
+
+        //std::cout << "input.len = " << input.len << std::endl;
         return 0;
       },
       on_receive_reset
@@ -186,6 +207,7 @@ public:
     {
       stream_open_.state = this;
       stream_open_.cb = [](quicly_stream_open_t* self, quicly_stream_t* stream) -> int {
+        //std::cout << "server on_stream_open" << std::endl;
         auto tmp = static_cast<quicly_stream_open_accept<Message>*>(self);
         return tmp->state->on_stream_open(self, stream);
       };
@@ -193,7 +215,7 @@ public:
 
   expected<io::network::native_socket>
   create_socket(uint16_t port, const char* host, bool) override {
-    std::cout << "create_socket" << std::endl;
+    //std::cout << "create_socket" << std::endl;
     memset(&tlsctx_, 0, sizeof(ptls_context_t));
     tlsctx_.random_bytes = ptls_openssl_random_bytes;
     tlsctx_.get_time = &ptls_get_time;
@@ -258,11 +280,11 @@ public:
   void accept_connection(quicly_conn_t* conn,
                          io::network::acceptor_base* base) {
     CAF_LOG_TRACE("");
-    std::cout << "accept connection" << std::endl;
+    //std::cout << "accept connection" << std::endl;
     // create newb with new connection_transport_pol
-    transport_ptr trans{new quicly_transport(conn, fd_)};
-    trans->prepare_next_read(nullptr);
-    trans->prepare_next_write(nullptr);
+    transport_ptr trans{new quicly_transport(conn, fd_, base, true)};
+    trans->prepare_next_read(base);
+    trans->prepare_next_write(base);
     auto en = base->create_newb(fd_, std::move(trans), false);
     if (!en) {
       CAF_LOG_ERROR("could not create newb");
@@ -273,7 +295,7 @@ public:
 
   void read_event(io::network::acceptor_base* base) {
     CAF_LOG_TRACE("");
-    std::cout << "read_event" << std::endl;
+    //std::cout << "read_event" << std::endl;
     uint8_t buf[4096];
     msghdr mess = {};
     sockaddr sa = {};
@@ -303,14 +325,18 @@ public:
           break;
         }
       }
-      quicly_conn_t *conn = nullptr;
-      size_t i;
+
+      auto it = std::find_if(newbs_.begin(), newbs_.end(), [&](const std::pair<quicly_conn_t*, actor>& pair) {
+        return quicly_is_destination(pair.first, &sa, salen_, &packet);
+      });
+
       // was connection already accepted?
-      auto newb_it  = newbs_.find(conn);
-      if (newb_it != newbs_.end()) {
+      if (it != newbs_.end()) {
+        auto conn = (it->first);
         quicly_receive(conn, &packet);
       } else if (QUICLY_PACKET_IS_LONG_HEADER(packet.octets.base[0])) {
         /* new connection */
+        quicly_conn_t* conn = nullptr;
         int ret = quicly_accept(&conn, &ctx, &sa, mess.msg_namelen, &packet,
                                 enforce_retry_ ? packet.token /* a production server should validate the token */
                                                : ptls_iovec_init(nullptr, 0),
@@ -332,7 +358,9 @@ public:
         }
       }
       off += plen;
-      if (send_pending(fd_, conn)) {
+    }
+    for (auto& pair : newbs_) {
+      if (send_pending(fd_, pair.first)) {
         CAF_LOG_ERROR("send_pending failed");
       }
     }
@@ -340,7 +368,7 @@ public:
 
   error write_event(io::network::acceptor_base* base) {
     CAF_LOG_TRACE("");
-    std::cout  << "write event" << std::endl;
+    //std::cout  << "write event" << std::endl;
     for (const auto& pair : newbs_) {
       auto& act = pair.second;
       auto ptr = caf::actor_cast<caf::abstract_actor *>(act);
@@ -358,24 +386,19 @@ public:
   }
 
 private:
-  int on_stream_open(struct st_quicly_stream_open_t* self, struct st_quicly_stream_t* stream) {
+  int on_stream_open(struct st_quicly_stream_open_t*, struct st_quicly_stream_t* stream) {
+    //std::cout << "server on_stream_open cb func" << std::endl;
     // set stream callbacks for the new stream
     int ret;
-    if ((ret = quicly_streambuf_create(stream, sizeof(quicly_streambuf_t))) != 0)
+    if ((ret = quicly_streambuf_create(stream, sizeof(acceptor_streambuf))) != 0)
       return ret;
 
-    auto conn_it = newbs_.find(stream->conn);
-    if (conn_it != newbs_.end()) {
-      auto ptr = caf::actor_cast<caf::abstract_actor*>(conn_it->second);
-      CAF_ASSERT(ptr != nullptr);
-      auto ref = dynamic_cast<quicly_transport*>(ptr);
-      if (ref != nullptr)
-        stream->data = ref;
-      else
-        return -1;
-      stream->callbacks = &stream_callbacks;
-    }
-
+    auto newb = newbs_.at(stream->conn);
+    auto ptr = caf::actor_cast<caf::abstract_actor*>(newb);
+    CAF_ASSERT(ptr != nullptr);
+    auto& ref = dynamic_cast<io::newb<Message>&>(*ptr);
+    static_cast<acceptor_streambuf*>(stream->data)->state = ref.proto.get();
+    stream->callbacks = &stream_callbacks;
 
     return 0;
   }

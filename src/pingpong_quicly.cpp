@@ -102,6 +102,7 @@ behavior raw_server(stateful_newb<new_raw_msg, state>* self, actor responder) {
               uint32_t counter;
               binary_deserializer bd(self->system(), msg.payload, msg.payload_len);
               bd(counter);
+              std::cout << "got " << counter << std::endl;
               auto whdl = self->wr_buf(nullptr);
               binary_serializer bs(&self->backend(), *whdl.buf);
               bs(counter);
@@ -132,10 +133,12 @@ behavior raw_client(stateful_newb<new_raw_msg, state>* self) {
               binary_deserializer bd(self->system(), msg.payload, msg.payload_len);
               bd(counter);
               s.received_messages += 1;
-              if (s.received_messages % 100 == 0)
+              std::cerr << "got " << counter << std::endl;
+              /*if (s.received_messages % 100 == 0) {
                 std::cerr << "got " << s.received_messages << std::endl;
+              }*/
               if (s.received_messages >= s.messages) {
-                std::cerr << "got all messages!" << std::endl;
+                std::cout << "got all messages!" << std::endl;
                 self->send(s.responder, quit_atom::value);
                 self->stop();
                 self->quit();

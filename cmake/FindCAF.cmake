@@ -38,16 +38,18 @@ foreach (comp ${CAF_FIND_COMPONENTS})
         "${CAF_ROOT_DIR}/include"
         "${CAF_ROOT_DIR}/../libcaf_${comp}")
   endif ()
-  find_path(CAF_INCLUDE_DIR_${UPPERCOMP}
-            NAMES
-              ${HDRNAME}
-              HINTS
-              ${header_hints}
-              /usr/include
-              /usr/local/include
-              /opt/local/include
-              /sw/include
-              ${CMAKE_INSTALL_PREFIX}/include)
+  find_path(
+    CAF_INCLUDE_DIR_${UPPERCOMP}
+    NAMES
+      ${HDRNAME}
+    HINTS
+      ${header_hints}
+      /usr/include
+      /usr/local/include
+      /opt/local/include
+      /sw/include
+      ${CMAKE_INSTALL_PREFIX}/include
+  )
   mark_as_advanced(CAF_INCLUDE_DIR_${UPPERCOMP})
   if (NOT "${CAF_INCLUDE_DIR_${UPPERCOMP}}"
       STREQUAL "CAF_INCLUDE_DIR_${UPPERCOMP}-NOTFOUND")
@@ -69,16 +71,18 @@ foreach (comp ${CAF_FIND_COMPONENTS})
       if (CAF_ROOT_DIR)
         set(library_hints "${CAF_ROOT_DIR}/lib")
       endif ()
-      find_library(CAF_LIBRARY_${UPPERCOMP}
-                   NAMES
-                     "caf_${comp}"
-                   HINTS
-                     ${library_hints}
-                     /usr/lib
-                     /usr/local/lib
-                     /opt/local/lib
-                     /sw/lib
-                     ${CMAKE_INSTALL_PREFIX}/lib)
+      find_library(
+        CAF_LIBRARY_${UPPERCOMP}
+        NAMES
+          "caf_${comp}"
+        HINTS
+          ${library_hints}
+          /usr/lib
+          /usr/local/lib
+          /opt/local/lib
+          /sw/lib
+          ${CMAKE_INSTALL_PREFIX}/lib
+      )
       mark_as_advanced(CAF_LIBRARY_${UPPERCOMP})
       if ("${CAF_LIBRARY_${UPPERCOMP}}"
           STREQUAL "CAF_LIBRARY_${UPPERCOMP}-NOTFOUND")
@@ -90,15 +94,42 @@ foreach (comp ${CAF_FIND_COMPONENTS})
   endif ()
 endforeach ()
 
+# find build config file
+if (CAF_ROOT_DIR)
+  set(header_hints "${CAF_ROOT_DIR}/libcaf_core")
+endif ()
+find_path(
+  CAF_INCLUDE_DIR_BUILD_CONFIG
+  NAMES
+    caf/detail/build_config.hpp
+  HINTS
+    ${header_hints}
+    /usr/include
+    /usr/local/include
+    /opt/local/include
+    /sw/include
+    ${CMAKE_INSTALL_PREFIX}/include
+  )
+message("CAF_INCLUDE_DIR_BUILD_CONFIG: ${CAF_INCLUDE_DIR_BUILD_CONFIG}")
+
+if (NOT "${CAF_INCLUDE_DIR_BUILD_CONFIG}"
+    STREQUAL "CAF_INCLUDE_DIR_BUILD_CONFIG-NOTFOUND")
+  set(CAF_INCLUDE_DIRS ${CAF_INCLUDE_DIRS} ${CAF_INCLUDE_DIR_BUILD_CONFIG})
+endif()
+
 # let CMake check whether all requested components have been found
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(CAF
-                                  FOUND_VAR CAF_FOUND
-                                  REQUIRED_VARS CAF_LIBRARIES CAF_INCLUDE_DIRS
-                                  HANDLE_COMPONENTS)
+find_package_handle_standard_args(
+  CAF
+  FOUND_VAR CAF_FOUND
+  REQUIRED_VARS CAF_LIBRARIES CAF_INCLUDE_DIRS
+  HANDLE_COMPONENTS
+)
 
 # final step to tell CMake we're done
-mark_as_advanced(CAF_ROOT_DIR
-                 CAF_LIBRARIES
-                 CAF_INCLUDE_DIRS)
+mark_as_advanced(
+  CAF_ROOT_DIR
+  CAF_LIBRARIES
+  CAF_INCLUDE_DIRS
+)
 
