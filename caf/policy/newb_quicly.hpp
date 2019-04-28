@@ -79,6 +79,8 @@ struct quicly_transport : public transport {
 
   void shutdown(io::network::newb_base*, io::network::native_socket) override;
 
+  error timeout(io::network::newb_base* base, atom_value, uint32_t) override;
+
   void take_data(ptls_iovec_t& input);
 
 private:
@@ -92,18 +94,19 @@ private:
           quicly_streambuf_egress_emit,
           on_stop_sending,
           [](quicly_stream_t *stream, size_t off, const void *src, size_t len) -> int {
-            //std::cout << "on_receive" << std::endl;
-
             auto trans = static_cast<transport_streambuf*>(stream->data)->state;
             ptls_iovec_t input;
             int ret;
-            if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
+            if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0) {
+              std::cout << "quicly_streambuf_ingress_receive = " << ret << std::endl;
               return ret;
+            }
             if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
               trans->take_data(input);
               quicly_streambuf_ingress_shift(stream, input.len);
             }
-            //std::cout << "input.len " << len << std::endl;
+            std::cout << "received " << input.len << std::endl;
+            
             return 0;
           },
           on_receive_reset
@@ -174,20 +177,19 @@ private:
       quicly_streambuf_egress_emit,
       on_stop_sending,
       [](quicly_stream_t *stream, size_t off, const void *src, size_t len) -> int {
-        //std::cout << "server_on_receive" << std::endl;
         auto proto = static_cast<acceptor_streambuf*>(stream->data)->state;
         ptls_iovec_t input;
         int ret;
         if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0) {
+          std::cout << "quicly_streambuf_ingress_receive = " << ret << std::endl;
           return ret;
         }
-        if ((input = quicly_streambuf_ingress_get(stream)).len > 0) {
+        if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
           // pass data to protocol
           proto->read(reinterpret_cast<char*>(input.base), input.len);
           quicly_streambuf_ingress_shift(stream, input.len);
         }
-
-        //std::cout << "input.len = " << input.len << std::endl;
+        std::cout << "received " << input.len << std::endl;
         return 0;
       },
       on_receive_reset
@@ -207,7 +209,6 @@ public:
     {
       stream_open_.state = this;
       stream_open_.cb = [](quicly_stream_open_t* self, quicly_stream_t* stream) -> int {
-        //std::cout << "server on_stream_open" << std::endl;
         auto tmp = static_cast<quicly_stream_open_accept<Message>*>(self);
         return tmp->state->on_stream_open(self, stream);
       };
@@ -215,7 +216,6 @@ public:
 
   expected<io::network::native_socket>
   create_socket(uint16_t port, const char* host, bool) override {
-    //std::cout << "create_socket" << std::endl;
     memset(&tlsctx_, 0, sizeof(ptls_context_t));
     tlsctx_.random_bytes = ptls_openssl_random_bytes;
     tlsctx_.get_time = &ptls_get_time;
@@ -228,6 +228,9 @@ public:
     ctx.tls = &tlsctx_;
     ctx.stream_open = &stream_open_;
     ctx.closed_by_peer = &closed_by_peer_;
+    // enable logging to std::cerr
+    //ctx.event_log.cb = quicly_new_default_event_logger(stderr);
+    //ctx.event_log.mask = UINT64_MAX;
 
     setup_session_cache(ctx.tls);
     quicly_amend_ptls_context(ctx.tls);
@@ -237,7 +240,7 @@ public:
     if (path) {
       path_to_certs = path;
     } else {
-      // try to load defailt certs
+      // try to load default certs
       path_to_certs = "/home/jakob/CLionProjects/quicly-chat/quicly/t/assets/";
     }
     load_certificate_chain(ctx.tls, (path_to_certs + "server.crt").c_str());

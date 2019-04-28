@@ -18,8 +18,10 @@
 
 #include "newb_quicly.hpp"
 #include "caf/io/newb.hpp"
+#include "caf/binary_deserializer.hpp"
 
 #include "caf/config.hpp"
+
 
 #ifdef CAF_WINDOWS
 # ifndef WIN32_LEAN_AND_MEAN
@@ -100,7 +102,6 @@ quicly_transport::quicly_transport(quicly_conn_t* conn, int fd,
 quicly_transport::quicly_transport() : quicly_transport(nullptr, -1, nullptr, false) {}
 
 io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent) {
-  static int counter = 0;
   CAF_LOG_TRACE("");
   std::cout << "read_some" << std::endl;
   uint8_t buf[4096];
@@ -119,7 +120,8 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
     perror("recvmsg failed");
     return io::network::rw_state::indeterminate;
   };
-  ++counter;
+  std::cout << "read_some" << std::endl;
+
   size_t off = 0;
   while (off != rret) {
     quicly_decoded_packet_t packet;
@@ -133,6 +135,7 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
   if (conn_ != nullptr) {
     auto ret = send_pending(fd_, conn_);
     if (ret != 0) {
+      std::cout << "quicly_free?!" << std::endl;
       quicly_free(conn_);
       conn_ = nullptr;
       if (ret == QUICLY_ERROR_FREE_CONNECTION) {
@@ -147,6 +150,11 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
     auto state = quicly_get_state(conn_);
     if (!connected && state == QUICLY_STATE_CONNECTED) {
       std::cout << "QUICLY_STATE_CONNECTED" << std::endl;
+      auto timeout = quicly_get_first_timeout(conn_);
+      std::cout << "set timeout after " << timeout << "ms" << std::endl;
+      // bad idea.
+      //parent->set_timeout(std::chrono::milliseconds(100), 
+      //                    io::transport_atom::value, 0);      
       connected = true;
       flush(parent);
     }
@@ -214,10 +222,16 @@ void quicly_transport::configure_read(io::receive_policy::config config) {
 io::network::rw_state
 quicly_transport::write_some(io::network::newb_base* parent) {
   CAF_LOG_TRACE("");
+
   std::cout << "write_some" << std::endl;
   //std::cout << "trans->write_some" << std::endl;
   const void* buf = send_buffer.data() + written;
   auto len = send_buffer.size() - written;
+  uint32_t counter;
+  binary_deserializer bd(parent->system(), send_buffer.data() + written, len);
+  bd(counter);
+
+  std::cout << "should write " << counter << std::endl;
 
   // open stream for this data
   quicly_stream_t* stream;
@@ -226,14 +240,16 @@ quicly_transport::write_some(io::network::newb_base* parent) {
     return io::network::rw_state::failure;
   }
 
-  //std::cout << "writing " << len << " bytes" << std::endl;
+  std::cout << "writing " << len << " bytes" << std::endl;
 
   // send data and close stream afterwards.
   quicly_streambuf_egress_write(stream, buf, len);
   quicly_streambuf_egress_shutdown(stream);
+  while (quicly_get_first_timeout(conn_) > ctx.now->cb(ctx.now));
   if (send_pending(fd_, conn_)) {
-     CAF_LOG_ERROR("send failed"
-                   << CAF_ARG(io::network::last_socket_error_as_string()));
+    CAF_LOG_ERROR("send failed"
+                  << CAF_ARG(io::network::last_socket_error_as_string()));
+    std::cout << "send failed" << std::endl;
     return io::network::rw_state::failure;
   }
   written += len;
@@ -292,6 +308,8 @@ quicly_transport::connect(const std::string& host, uint16_t port,
   ctx.tls = &tlsctx_;
   ctx.stream_open = &stream_open_;
   ctx.closed_by_peer = &closed_by_peer_;
+  //ctx.event_log.cb = quicly_new_default_event_logger(stderr);
+  //ctx.event_log.mask = UINT64_MAX;
 
   setup_session_cache(ctx.tls);
   quicly_amend_ptls_context(ctx.tls);
@@ -350,6 +368,18 @@ int quicly_transport::on_stream_open(quicly_stream_open_t*,
   // set this ptr to streambuf.
   static_cast<transport_streambuf*>(stream->data)->state = this;
   return 0;
+}
+
+error quicly_transport::timeout(io::network::newb_base* base, atom_value, uint32_t) {
+  std::cout << "TIMEOUT!!!!!!!!!!!!!!!!!!" << std::endl;
+
+  send_pending(fd_, conn_);
+  auto timeout = quicly_get_first_timeout(conn_);
+  std::cout << "set timeout after " << timeout << "ms" << std::endl;
+  // set next timeout after quicly timeout ms
+  base->set_timeout(std::chrono::milliseconds(100), 
+                    caf::io::transport_atom::value, 0);
+  return none;
 }
 
 io::network::native_socket get_newb_socket(io::network::newb_base* n) {

@@ -3,6 +3,7 @@
 //
 
 #include "detail/quicly_stuff.hpp"
+#include <iostream>
 
 constexpr char ticket_file[] = "ticket.bin";
 quicly_context_t ctx;
@@ -45,7 +46,10 @@ int send_one(int fd, quicly_datagram_t *p) {
   vec.iov_len = p->data.len;
   mess.msg_iov = &vec;
   mess.msg_iovlen = 1;
-  while ((ret = (int)sendmsg(fd, &mess, 0)) == -1 && errno == EINTR);
+  while ((ret = (int)sendmsg(fd, &mess, 0)) == -1 && errno == EINTR) {
+    std::cout << "sendmsg failed <- send_one" << std::endl;
+  };
+  std::cout << "sendmsg worked.... <- send_one" << std::endl;
   return ret;
 }
 
@@ -57,13 +61,20 @@ int send_pending(int fd, quicly_conn_t *conn) {
   do {
     num_packets = sizeof(packets) / sizeof(packets[0]);
     if ((ret = quicly_send(conn, packets, &num_packets)) == 0) {
+      std::cout << "num packets = " << num_packets << std::endl;
       for (i = 0; i != num_packets; ++i) {
-        if ((send_one(fd, packets[i])) == -1)
+        if ((send_one(fd, packets[i])) == -1) {
           perror("sendmsg failed");
+          std::cout << "[quicly_stuff] send_msg failed" << std::endl;
+        } else {
+          std::cout << "[quicly_stuff] send_one succeeded" << std::endl;
+        }
         ret = 0;
         quicly_packet_allocator_t *pa = quicly_get_context(conn)->packet_allocator;
         pa->free_packet(pa, packets[i]);
       }
+    } else {
+      std::cout << "[quicly_stuff] send_pending: quicly_send failed" << std::endl;
     }
   } while (ret == 0 && num_packets == sizeof(packets) / sizeof(packets[0]));
 
