@@ -98,15 +98,12 @@ private:
             ptls_iovec_t input;
             int ret;
             if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0) {
-              std::cout << "quicly_streambuf_ingress_receive = " << ret << std::endl;
               return ret;
             }
             if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
               trans->take_data(input);
               quicly_streambuf_ingress_shift(stream, input.len);
             }
-            std::cout << "received " << input.len << std::endl;
-            
             return 0;
           },
           on_receive_reset
@@ -129,6 +126,7 @@ private:
   ptls_key_exchange_algorithm_t *key_exchanges_[128];
   ptls_context_t tlsctx_;
   quicly_conn_t* conn_;
+  quicly_stream_t* stream_;
   int fd_;
 
   // State for reading.
@@ -181,7 +179,6 @@ private:
         ptls_iovec_t input;
         int ret;
         if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0) {
-          std::cout << "quicly_streambuf_ingress_receive = " << ret << std::endl;
           return ret;
         }
         if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
@@ -189,7 +186,6 @@ private:
           proto->read(reinterpret_cast<char*>(input.base), input.len);
           quicly_streambuf_ingress_shift(stream, input.len);
         }
-        std::cout << "received " << input.len << std::endl;
         return 0;
       },
       on_receive_reset
@@ -283,7 +279,6 @@ public:
   void accept_connection(quicly_conn_t* conn,
                          io::network::acceptor_base* base) {
     CAF_LOG_TRACE("");
-    //std::cout << "accept connection" << std::endl;
     // create newb with new connection_transport_pol
     transport_ptr trans{new quicly_transport(conn, fd_, base, true)};
     trans->prepare_next_read(base);
@@ -298,7 +293,6 @@ public:
 
   void read_event(io::network::acceptor_base* base) {
     CAF_LOG_TRACE("");
-    //std::cout << "read_event" << std::endl;
     uint8_t buf[4096];
     msghdr mess = {};
     sockaddr sa = {};
@@ -371,7 +365,6 @@ public:
 
   error write_event(io::network::acceptor_base* base) {
     CAF_LOG_TRACE("");
-    //std::cout  << "write event" << std::endl;
     for (const auto& pair : newbs_) {
       auto& act = pair.second;
       auto ptr = caf::actor_cast<caf::abstract_actor *>(act);
@@ -390,7 +383,6 @@ public:
 
 private:
   int on_stream_open(struct st_quicly_stream_open_t*, struct st_quicly_stream_t* stream) {
-    //std::cout << "server on_stream_open cb func" << std::endl;
     // set stream callbacks for the new stream
     int ret;
     if ((ret = quicly_streambuf_create(stream, sizeof(acceptor_streambuf))) != 0)

@@ -147,7 +147,7 @@ void caf_main(actor_system& sys, const config& cfg) {
     std::cerr << "creating server" << std::endl;
     accept_ptr<policy::new_raw_msg> pol{new accept_udp<policy::new_raw_msg>};
     if (cfg.is_ordered) {
-      auto eserver = make_server<ordered_proto_t>(sys, raw_server, std::move(pol),
+      auto eserver = spawn_server<ordered_proto_t>(sys, raw_server, std::move(pol),
                                                   port, nullptr, true, self);
       if (!eserver) {
         std::cerr << "failed to start server on port " << port << std::endl;
@@ -156,9 +156,10 @@ void caf_main(actor_system& sys, const config& cfg) {
       auto server = std::move(*eserver);
       await_done("done");
       std::cerr << "stopping server" << std::endl;
-      server->stop();
+      self->send_exit(server, caf::exit_reason::user_shutdown);
+      std::this_thread::sleep_for(std::chrono::seconds(1));    
     } else {
-      auto eserver = make_server<proto_t>(sys, raw_server, std::move(pol), port,
+      auto eserver = spawn_server<proto_t>(sys, raw_server, std::move(pol), port,
                                           nullptr, true, self);
       if (!eserver) {
         std::cerr << "failed to start server on port " << port << std::endl;
@@ -167,7 +168,8 @@ void caf_main(actor_system& sys, const config& cfg) {
       auto server = std::move(*eserver);
       await_done("done");
       std::cerr << "stopping server" << std::endl;
-      server->stop();
+      self->send_exit(server, caf::exit_reason::user_shutdown);
+      std::this_thread::sleep_for(std::chrono::seconds(1));
     }
   } else {
     std::cerr << "creating client" << std::endl;

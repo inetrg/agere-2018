@@ -82,6 +82,7 @@ quicly_transport::quicly_transport(quicly_conn_t* conn, int fd,
       key_exchanges_(),
       tlsctx_(),
       conn_(conn),
+      stream_(nullptr),
       fd_(fd),
       read_threshold{1},
       collected{0},
@@ -103,7 +104,6 @@ quicly_transport::quicly_transport() : quicly_transport(nullptr, -1, nullptr, fa
 
 io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent) {
   CAF_LOG_TRACE("");
-  std::cout << "read_some" << std::endl;
   uint8_t buf[4096];
   msghdr mess = {};
   sockaddr sa = {};
@@ -117,10 +117,8 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
   mess.msg_iovlen = 1;
   ssize_t rret;
   if ((rret = recvmsg(fd_, &mess, 0)) <= 0) {
-    perror("recvmsg failed");
     return io::network::rw_state::indeterminate;
   };
-  std::cout << "read_some" << std::endl;
 
   size_t off = 0;
   while (off != rret) {
@@ -135,13 +133,12 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
   if (conn_ != nullptr) {
     auto ret = send_pending(fd_, conn_);
     if (ret != 0) {
-      std::cout << "quicly_free?!" << std::endl;
       quicly_free(conn_);
       conn_ = nullptr;
       if (ret == QUICLY_ERROR_FREE_CONNECTION) {
-        std::cerr << "QUICLY_ERROR_FREE_CONNECTION" << std::endl;
+        CAF_LOG_ERROR("QUICLY_ERROR_FREE_CONNECTION");
       } else {
-        std::cout << "quicly_send returned " << ret << std::endl;
+        CAF_LOG_ERROR("quicly_send returned");
       }
     }
   }
@@ -149,16 +146,11 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
   if (conn_ != nullptr) {
     auto state = quicly_get_state(conn_);
     if (!connected && state == QUICLY_STATE_CONNECTED) {
-      std::cout << "QUICLY_STATE_CONNECTED" << std::endl;
-      auto timeout = quicly_get_first_timeout(conn_);
-      std::cout << "set timeout after " << timeout << "ms" << std::endl;
-      // bad idea.
-      //parent->set_timeout(std::chrono::milliseconds(100), 
-      //                    io::transport_atom::value, 0);      
       connected = true;
       flush(parent);
     }
   }
+
   // need some state for the callbacks to determine a shutdown
   /*if (sres < 0) {
     auto err = io::network::last_socket_error();
@@ -222,34 +214,22 @@ void quicly_transport::configure_read(io::receive_policy::config config) {
 io::network::rw_state
 quicly_transport::write_some(io::network::newb_base* parent) {
   CAF_LOG_TRACE("");
-
-  std::cout << "write_some" << std::endl;
-  //std::cout << "trans->write_some" << std::endl;
   const void* buf = send_buffer.data() + written;
   auto len = send_buffer.size() - written;
-  uint32_t counter;
-  binary_deserializer bd(parent->system(), send_buffer.data() + written, len);
-  bd(counter);
 
-  std::cout << "should write " << counter << std::endl;
-
-  // open stream for this data
-  quicly_stream_t* stream;
-  if (quicly_open_stream(conn_, &stream, 0)) {
-    std::cerr << "quicly_open_stream failed" << std::endl;
-    return io::network::rw_state::failure;
-  }
-
-  std::cout << "writing " << len << " bytes" << std::endl;
+  // open stream if necessary
+  if (connected && !stream_) {
+    if (quicly_open_stream(conn_, &stream_, 0)) {
+      CAF_LOG_ERROR("quicly_open_stream failed");
+    }
+  } 
 
   // send data and close stream afterwards.
-  quicly_streambuf_egress_write(stream, buf, len);
-  quicly_streambuf_egress_shutdown(stream);
-  while (quicly_get_first_timeout(conn_) > ctx.now->cb(ctx.now));
+  quicly_streambuf_egress_write(stream_, buf, len);
+
   if (send_pending(fd_, conn_)) {
     CAF_LOG_ERROR("send failed"
                   << CAF_ARG(io::network::last_socket_error_as_string()));
-    std::cout << "send failed" << std::endl;
     return io::network::rw_state::failure;
   }
   written += len;
@@ -259,7 +239,6 @@ quicly_transport::write_some(io::network::newb_base* parent) {
 }
 
 void quicly_transport::prepare_next_write(io::network::newb_base* parent) {
-  //std::cout << "trans->prepare_next_write" << std::endl;
   written = 0;
   send_buffer.clear();
   if (offline_buffer.empty()) {
@@ -276,7 +255,6 @@ void quicly_transport::prepare_next_write(io::network::newb_base* parent) {
 }
 
 void quicly_transport::flush(io::network::newb_base* parent) {
-  //std::cout << "trans->flush()" << std::endl;
   CAF_ASSERT(parent != nullptr);
   CAF_LOG_TRACE(CAF_ARG(offline_buffer.size()));
   if (!offline_buffer.empty() && !writing && connected) {
@@ -295,7 +273,6 @@ expected<io::network::native_socket>
 quicly_transport::connect(const std::string& host, uint16_t port,
                        optional<io::network::protocol::network>) {
   CAF_LOG_TRACE("");
-  //std::cout << "connecting to " << host << " : " << port << std::endl;
   memset(&tlsctx_, 0, sizeof(ptls_context_t));
   tlsctx_.random_bytes = ptls_openssl_random_bytes;
   tlsctx_.get_time = &ptls_get_time;
@@ -308,8 +285,10 @@ quicly_transport::connect(const std::string& host, uint16_t port,
   ctx.tls = &tlsctx_;
   ctx.stream_open = &stream_open_;
   ctx.closed_by_peer = &closed_by_peer_;
-  //ctx.event_log.cb = quicly_new_default_event_logger(stderr);
-  //ctx.event_log.mask = UINT64_MAX;
+  
+  // enable logging to std::cerr
+  // ctx.event_log.cb = quicly_new_default_event_logger(stderr);
+  // ctx.event_log.mask = UINT64_MAX;
 
   setup_session_cache(ctx.tls);
   quicly_amend_ptls_context(ctx.tls);
@@ -371,11 +350,8 @@ int quicly_transport::on_stream_open(quicly_stream_open_t*,
 }
 
 error quicly_transport::timeout(io::network::newb_base* base, atom_value, uint32_t) {
-  std::cout << "TIMEOUT!!!!!!!!!!!!!!!!!!" << std::endl;
-
   send_pending(fd_, conn_);
   auto timeout = quicly_get_first_timeout(conn_);
-  std::cout << "set timeout after " << timeout << "ms" << std::endl;
   // set next timeout after quicly timeout ms
   base->set_timeout(std::chrono::milliseconds(100), 
                     caf::io::transport_atom::value, 0);
