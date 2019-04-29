@@ -281,7 +281,7 @@ quicly_transport::connect(const std::string& host, uint16_t port,
   tlsctx_.require_dhe_on_psk = 1;
   tlsctx_.save_ticket = &save_ticket_;
 
-  ctx = quicly_default_context;
+  ctx = quicly_spec_context;
   ctx.tls = &tlsctx_;
   ctx.stream_open = &stream_open_;
   ctx.closed_by_peer = &closed_by_peer_;
@@ -330,11 +330,18 @@ quicly_transport::connect(const std::string& host, uint16_t port,
 
 void quicly_transport::shutdown(io::network::newb_base*,
                              io::network::native_socket sockfd) {
-  // close connection.
-  quicly_close(conn_, 0, "");
+  std::cout << "shutdown called" << std::endl;
+  quicly_streambuf_egress_shutdown(stream_);
   send_pending(fd_, conn_);
-  quicly_free(conn_);
-  io::network::shutdown_both(sockfd);
+
+  // this newb is not multiplexed -> clear whole connection
+  if (!parent_) {
+    // close connection.
+    quicly_close(conn_, 0, "");
+    send_pending(fd_, conn_);
+    quicly_free(conn_);
+    io::network::shutdown_both(sockfd);
+  }
 }
 
 int quicly_transport::on_stream_open(quicly_stream_open_t*,

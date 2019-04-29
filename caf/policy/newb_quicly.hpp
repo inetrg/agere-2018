@@ -51,6 +51,10 @@ struct acceptor_streambuf : public quicly_streambuf_t {
   protocol_base* state;
 };
 
+template<class Message>
+struct acceptor_on_closed_by_peer : public quicly_closed_by_peer_t {
+  accept_quicly<Message>* state;
+};
 
 struct quicly_transport : public transport {
   friend quicly_stream_open_trans;
@@ -151,13 +155,15 @@ template <class Message>
 struct accept_quicly : public accept<Message> {
 friend quicly_stream_open_trans;
 friend quicly_stream_callbacks_t;
+friend acceptor_on_closed_by_peer<Message>;
+
 
 private:
   char cid_key_[17];
   int fd_ = -1;
   quicly_cid_plaintext_t next_cid_;
   ptls_handshake_properties_t hs_properties_;
-  quicly_closed_by_peer_t closed_by_peer_;
+  acceptor_on_closed_by_peer<Message> closed_by_peer_;
   ptls_save_ticket_t save_ticket_;
   ptls_key_exchange_algorithm_t *key_exchanges_[128];
   ptls_context_t tlsctx_;
@@ -202,13 +208,20 @@ public:
     enforce_retry_(false),
     sa_(),
     salen_(0)
-    {
+  {
       stream_open_.state = this;
       stream_open_.cb = [](quicly_stream_open_t* self, quicly_stream_t* stream) -> int {
         auto tmp = static_cast<quicly_stream_open_accept<Message>*>(self);
         return tmp->state->on_stream_open(self, stream);
       };
-    }
+
+      closed_by_peer_.state = this;
+      closed_by_peer_.cb = [](quicly_closed_by_peer_t *self, quicly_conn_t* conn,
+                              int, uint64_t, const char*, size_t) {
+          auto tmp = static_cast<acceptor_on_closed_by_peer<Message>*>(self);
+          tmp->state->on_closed_by_peer(conn);
+      };
+  }
 
   expected<io::network::native_socket>
   create_socket(uint16_t port, const char* host, bool) override {
@@ -220,10 +233,11 @@ public:
     tlsctx_.require_dhe_on_psk = 1;
     tlsctx_.save_ticket = &save_ticket_;
 
-    ctx = quicly_default_context;
+    ctx = quicly_spec_context;
     ctx.tls = &tlsctx_;
     ctx.stream_open = &stream_open_;
     ctx.closed_by_peer = &closed_by_peer_;
+
     // enable logging to std::cerr
     //ctx.event_log.cb = quicly_new_default_event_logger(stderr);
     //ctx.event_log.mask = UINT64_MAX;
@@ -289,6 +303,7 @@ public:
       return;
     }
     newbs_.insert(std::make_pair(conn, *en));
+    std::cout << "accepted new conn: " << newbs_.size() << std::endl;
   }
 
   void read_event(io::network::acceptor_base* base) {
@@ -396,6 +411,11 @@ private:
     stream->callbacks = &stream_callbacks;
 
     return 0;
+  }
+
+  void on_closed_by_peer(quicly_conn_t* conn) {
+    newbs_.erase(conn);
+    std::cout << "deleted conn: " << newbs_.size() << std::endl;
   }
 };
 

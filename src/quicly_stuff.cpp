@@ -20,6 +20,7 @@ int on_receive_reset(quicly_stream_t *stream, int err) {
   return 0;
 }
 
+
 void on_closed_by_peer(quicly_closed_by_peer_t *self, quicly_conn_t *conn, int err, uint64_t frame_type, const char *reason,
                        size_t reason_len) {
   if (QUICLY_ERROR_IS_QUIC_TRANSPORT(err)) {
@@ -34,6 +35,7 @@ void on_closed_by_peer(quicly_closed_by_peer_t *self, quicly_conn_t *conn, int e
     fprintf(stderr, "unexpected close:code=%d\n", err);
   }
 }
+
 
 int send_one(int fd, quicly_datagram_t *p) {
   int ret;

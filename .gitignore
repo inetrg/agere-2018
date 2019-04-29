@@ -25,3 +25,5 @@ cmake-build-debug/
 picotls/
 quicly/
 
+### quicly ###
+**/ticket.bin
