@@ -29,6 +29,7 @@ fi
 cd $ROOT_DIR/actor-framework
 git apply $ROOT_DIR/caf-poll.diff
 ./configure --build-type=release --no-opencl --no-tools --no-examples
+cd build
 make -j$cores
 cd $ROOT_DIR
 
