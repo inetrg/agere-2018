@@ -29,13 +29,4 @@ int save_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src);
 void load_ticket(ptls_handshake_properties_t* hs_properties,
                  quicly_transport_parameters_t* resumed_transport_params);
 
-// TODO: this is for connection objects. Should wrap every raw ptr in this.
-struct quicly_conn_t_deleter {
-  void operator()(quicly_conn_t* conn) {
-    quicly_free(conn);
-  }
-};
-
-using quicly_conn_t_ptr = std::unique_ptr<quicly_conn_t, quicly_conn_t_deleter>;
-
 #endif //PICOQUIC_TEST_QUICLY_STUFF_HPP

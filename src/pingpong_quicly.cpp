@@ -199,6 +199,8 @@ void caf_main(actor_system& sys, const config& cfg) {
       }
       auto server = std::move(*eserver);
       await_done("done");
+      /*std::string dummy;
+      std::getline(std::cin, dummy);*/
       std::cerr << "stopping server" << std::endl;
       self->send_exit(server, caf::exit_reason::user_shutdown);
       std::this_thread::sleep_for(std::chrono::seconds(1));

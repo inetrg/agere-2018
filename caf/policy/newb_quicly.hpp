@@ -34,6 +34,15 @@ template <class Message>
 struct accept_quicly;
 struct quicly_transport;
 
+// TODO: this is for connection objects. Should wrap every raw ptr in this.
+struct quicly_conn_t_deleter {
+  void operator()(quicly_conn_t* conn) {
+    quicly_free(conn);
+  }
+};
+using quicly_conn_t_ptr = std::unique_ptr<quicly_conn_t, quicly_conn_t_deleter>;
+
+
 struct quicly_stream_open_trans : public quicly_stream_open_t {
   quicly_transport* state;
 };
@@ -62,6 +71,8 @@ struct quicly_transport : public transport {
   quicly_transport(quicly_conn_t* conn, int fd, io::network::acceptor_base* parent, bool connected);
 
   quicly_transport();
+
+  ~quicly_transport() = default;
 
   io::network::rw_state read_some(io::network::newb_base* parent) override;
 
@@ -93,26 +104,27 @@ private:
 
   // quicly state
   quicly_stream_callbacks_t stream_callbacks = {
-          quicly_streambuf_destroy,
-          quicly_streambuf_egress_shift,
-          quicly_streambuf_egress_emit,
-          on_stop_sending,
-          [](quicly_stream_t *stream, size_t off, const void *src, size_t len) -> int {
-            auto trans = static_cast<transport_streambuf*>(stream->data)->state;
-            ptls_iovec_t input;
-            int ret;
-            if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0) {
-              return ret;
-            }
-            if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
-              trans->take_data(input);
-              quicly_streambuf_ingress_shift(stream, input.len);
-            }
-            return 0;
-          },
-          on_receive_reset
+    quicly_streambuf_destroy,
+    quicly_streambuf_egress_shift,
+    quicly_streambuf_egress_emit,
+    on_stop_sending,
+    [](quicly_stream_t *stream, size_t off, const void *src, size_t len) -> int {
+      auto trans = static_cast<transport_streambuf*>(stream->data)->state;
+      ptls_iovec_t input;
+      int ret;
+      if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0) {
+        return ret;
+      }
+      if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
+        trans->take_data(input);
+        quicly_streambuf_ingress_shift(stream, input.len);
+      }
+      return 0;
+    },
+    on_receive_reset
   };
 
+  // base_ptr for multiplexed transports
   io::network::acceptor_base* parent_;
 
   // connection info
@@ -129,7 +141,7 @@ private:
   ptls_save_ticket_t save_ticket_;
   ptls_key_exchange_algorithm_t *key_exchanges_[128];
   ptls_context_t tlsctx_;
-  quicly_conn_t* conn_;
+  quicly_conn_t_ptr conn_;
   quicly_stream_t* stream_;
   int fd_;
 
@@ -153,9 +165,9 @@ io::network::native_socket get_newb_socket(io::network::newb_base*);
 
 template <class Message>
 struct accept_quicly : public accept<Message> {
-friend quicly_stream_open_trans;
-friend quicly_stream_callbacks_t;
-friend acceptor_on_closed_by_peer<Message>;
+  friend quicly_stream_open_trans;
+  friend quicly_stream_callbacks_t;
+  friend acceptor_on_closed_by_peer<Message>;
 
 
 private:
@@ -176,25 +188,25 @@ private:
 
   // quicly state
   quicly_stream_callbacks_t stream_callbacks = {
-      quicly_streambuf_destroy,
-      quicly_streambuf_egress_shift,
-      quicly_streambuf_egress_emit,
-      on_stop_sending,
-      [](quicly_stream_t *stream, size_t off, const void *src, size_t len) -> int {
-        auto proto = static_cast<acceptor_streambuf*>(stream->data)->state;
-        ptls_iovec_t input;
-        int ret;
-        if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0) {
-          return ret;
-        }
-        if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
-          // pass data to protocol
-          proto->read(reinterpret_cast<char*>(input.base), input.len);
-          quicly_streambuf_ingress_shift(stream, input.len);
-        }
-        return 0;
-      },
-      on_receive_reset
+    quicly_streambuf_destroy,
+    quicly_streambuf_egress_shift,
+    quicly_streambuf_egress_emit,
+    on_stop_sending,
+    [](quicly_stream_t *stream, size_t off, const void *src, size_t len) -> int {
+      auto proto = static_cast<acceptor_streambuf*>(stream->data)->state;
+      ptls_iovec_t input;
+      int ret;
+      if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0) {
+        return ret;
+      }
+      if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
+        // pass data to protocol
+        proto->read(reinterpret_cast<char*>(input.base), input.len);
+        quicly_streambuf_ingress_shift(stream, input.len);
+      }
+      return 0;
+    },
+    on_receive_reset
   };
 
 public:
@@ -209,18 +221,22 @@ public:
     sa_(),
     salen_(0)
   {
-      stream_open_.state = this;
-      stream_open_.cb = [](quicly_stream_open_t* self, quicly_stream_t* stream) -> int {
-        auto tmp = static_cast<quicly_stream_open_accept<Message>*>(self);
-        return tmp->state->on_stream_open(self, stream);
-      };
+    stream_open_.state = this;
+    stream_open_.cb = [](quicly_stream_open_t* self, quicly_stream_t* stream) -> int {
+      auto tmp = static_cast<quicly_stream_open_accept<Message>*>(self);
+      return tmp->state->on_stream_open(self, stream);
+    };
 
-      closed_by_peer_.state = this;
-      closed_by_peer_.cb = [](quicly_closed_by_peer_t *self, quicly_conn_t* conn,
-                              int, uint64_t, const char*, size_t) {
-          auto tmp = static_cast<acceptor_on_closed_by_peer<Message>*>(self);
-          tmp->state->on_closed_by_peer(conn);
-      };
+    closed_by_peer_.state = this;
+    closed_by_peer_.cb = [](quicly_closed_by_peer_t *self, quicly_conn_t* conn,
+                            int, uint64_t, const char*, size_t) {
+        auto tmp = static_cast<acceptor_on_closed_by_peer<Message>*>(self);
+        tmp->state->on_closed_by_peer(conn);
+    };
+  }
+
+  ~accept_quicly() {
+    newbs_.clear();
   }
 
   expected<io::network::native_socket>
@@ -238,10 +254,6 @@ public:
     ctx.stream_open = &stream_open_;
     ctx.closed_by_peer = &closed_by_peer_;
 
-    // enable logging to std::cerr
-    //ctx.event_log.cb = quicly_new_default_event_logger(stderr);
-    //ctx.event_log.mask = UINT64_MAX;
-
     setup_session_cache(ctx.tls);
     quicly_amend_ptls_context(ctx.tls);
 
@@ -251,7 +263,7 @@ public:
       path_to_certs = path;
     } else {
       // try to load default certs
-      path_to_certs = "/home/jakob/CLionProjects/quicly-chat/quicly/t/assets/";
+      path_to_certs = "/home/boss/CLionProjects/quicly-chat/quicly/t/assets/";
     }
     load_certificate_chain(ctx.tls, (path_to_certs + "server.crt").c_str());
     load_private_key(ctx.tls, (path_to_certs + "server.key").c_str());
@@ -303,7 +315,6 @@ public:
       return;
     }
     newbs_.insert(std::make_pair(conn, *en));
-    std::cout << "accepted new conn: " << newbs_.size() << std::endl;
   }
 
   void read_event(io::network::acceptor_base* base) {
@@ -338,6 +349,7 @@ public:
         }
       }
 
+      
       auto it = std::find_if(newbs_.begin(), newbs_.end(), [&](const std::pair<quicly_conn_t*, actor>& pair) {
         return quicly_is_destination(pair.first, &sa, salen_, &packet);
       });
@@ -414,8 +426,12 @@ private:
   }
 
   void on_closed_by_peer(quicly_conn_t* conn) {
+    auto newb = newbs_.at(conn);
+    auto ptr = caf::actor_cast<caf::abstract_actor*>(newb);
+    CAF_ASSERT(ptr != nullptr);
+    auto& ref = dynamic_cast<io::newb<Message>&>(*ptr);
+    ref.graceful_shutdown(); // TODO: how to properly delete newb?
     newbs_.erase(conn);
-    std::cout << "deleted conn: " << newbs_.size() << std::endl;
   }
 };
 
