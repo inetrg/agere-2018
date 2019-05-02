@@ -117,6 +117,9 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
   mess.msg_iov = &vec;
   mess.msg_iovlen = 1;
   ssize_t rret;
+
+  parent->clock().cancel_timeouts(parent);
+
   if ((rret = recvmsg(fd_, &mess, 0)) <= 0) {
     return io::network::rw_state::indeterminate;
   };
@@ -146,6 +149,11 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
       flush(parent);
     }
   }
+
+  auto timeout = quicly_get_first_timeout(conn_.get());
+  // set next timeout after quicly timeout ms
+  parent->set_timeout(std::chrono::milliseconds(timeout),
+                    caf::io::transport_atom::value, 0);
 
   return io::network::rw_state::success;
 }
@@ -198,6 +206,7 @@ void quicly_transport::configure_read(io::receive_policy::config config) {
 io::network::rw_state
 quicly_transport::write_some(io::network::newb_base* parent) {
   CAF_LOG_TRACE("");
+  parent->clock().cancel_timeouts(parent_);
   const void* buf = send_buffer.data() + written;
   auto len = send_buffer.size() - written;
 
@@ -219,6 +228,10 @@ quicly_transport::write_some(io::network::newb_base* parent) {
   written += len;
   // since the whole buffer is copied, we can call prepare next write every time
   prepare_next_write(parent);
+  auto timeout = quicly_get_first_timeout(conn_.get());
+  // set next timeout after quicly timeout ms
+  parent->set_timeout(std::chrono::milliseconds(timeout),
+                    caf::io::transport_atom::value, 0);
   return io::network::rw_state::success;
 }
 
@@ -341,6 +354,7 @@ int quicly_transport::on_stream_open(quicly_stream_open_t*,
 }
 
 error quicly_transport::timeout(io::network::newb_base* base, atom_value, uint32_t) {
+  std::cout << "timeout" << std::endl;
   send_pending(fd_, conn_.get());
   auto timeout = quicly_get_first_timeout(conn_.get());
   // set next timeout after quicly timeout ms
