@@ -118,7 +118,7 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
   mess.msg_iovlen = 1;
   ssize_t rret;
 
-  parent->clock().cancel_timeouts(parent);
+  reset_timeout(parent);
 
   if ((rret = recvmsg(fd_, &mess, 0)) <= 0) {
     return io::network::rw_state::indeterminate;
@@ -150,8 +150,7 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
     }
   }
 
-  if (!parent_)
-    set_timeout(parent);  
+  set_timeout(parent);
 
   return io::network::rw_state::success;
 }
@@ -204,7 +203,7 @@ void quicly_transport::configure_read(io::receive_policy::config config) {
 io::network::rw_state
 quicly_transport::write_some(io::network::newb_base* parent) {
   CAF_LOG_TRACE("");
-  parent->clock().cancel_timeouts(parent_);
+  reset_timeout(parent);
   const void* buf = send_buffer.data() + written;
   auto len = send_buffer.size() - written;
 
@@ -226,8 +225,7 @@ quicly_transport::write_some(io::network::newb_base* parent) {
   written += len;
   // since the whole buffer is copied, we can call prepare next write every time
   prepare_next_write(parent);
-  if (!parent_)
-    set_timeout(parent);
+  set_timeout(parent);
   return io::network::rw_state::success;
 }
 
@@ -323,10 +321,11 @@ quicly_transport::connect(const std::string& host, uint16_t port,
   return fd_;
 }
 
-void quicly_transport::shutdown(io::network::newb_base*,
+void quicly_transport::shutdown(io::network::newb_base* base,
                              io::network::native_socket sockfd) {
   quicly_streambuf_egress_shutdown(stream_);
   send_pending(fd_, conn_.get());
+  reset_timeout(base);
 
   // this newb is not multiplexed -> clear whole connection
   if (!parent_) {
@@ -341,9 +340,14 @@ void quicly_transport::set_timeout(io::network::newb_base* base) {
   auto timeout_at = quicly_get_first_timeout(conn_.get());
   quicly_context_t *ctx = quicly_get_context(conn_.get());
   int64_t delta = timeout_at - ctx->now->cb(ctx->now);
-  if (parent_)
   base->set_timeout(std::chrono::milliseconds(delta), 
                     caf::io::transport_atom::value, 0);
+  std::cout << "set_timeout after " << delta << "ms" << std::endl;
+}
+
+void quicly_transport::reset_timeout(io::network::newb_base* base) {
+  base->clock().cancel_timeouts(base);
+  std::cout << "reset_timeout" << std::endl;
 }
 
 int quicly_transport::on_stream_open(quicly_stream_open_t*,
@@ -359,6 +363,7 @@ int quicly_transport::on_stream_open(quicly_stream_open_t*,
 }
 
 error quicly_transport::timeout(io::network::newb_base* base, atom_value, uint32_t) {
+  std::cout << "timeout" << std::endl;
   send_pending(fd_, conn_.get());
   set_timeout(base);
   return none;

@@ -100,6 +100,8 @@ struct quicly_transport : public transport {
 
   void set_timeout(io::network::newb_base* base);
 
+  void reset_timeout(io::network::newb_base* base);
+
 private:
   // quicly callbacks
   int on_stream_open(st_quicly_stream_open_t* self, st_quicly_stream_t* stream);
