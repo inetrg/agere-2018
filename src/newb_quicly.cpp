@@ -150,10 +150,8 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
     }
   }
 
-  auto timeout = quicly_get_first_timeout(conn_.get());
-  // set next timeout after quicly timeout ms
-  parent->set_timeout(std::chrono::milliseconds(timeout),
-                    caf::io::transport_atom::value, 0);
+  if (!parent_)
+    set_timeout(parent);  
 
   return io::network::rw_state::success;
 }
@@ -228,10 +226,8 @@ quicly_transport::write_some(io::network::newb_base* parent) {
   written += len;
   // since the whole buffer is copied, we can call prepare next write every time
   prepare_next_write(parent);
-  auto timeout = quicly_get_first_timeout(conn_.get());
-  // set next timeout after quicly timeout ms
-  parent->set_timeout(std::chrono::milliseconds(timeout),
-                    caf::io::transport_atom::value, 0);
+  if (!parent_)
+    set_timeout(parent);
   return io::network::rw_state::success;
 }
 
@@ -341,6 +337,15 @@ void quicly_transport::shutdown(io::network::newb_base*,
   }
 }
 
+void quicly_transport::set_timeout(io::network::newb_base* base) {
+  auto timeout_at = quicly_get_first_timeout(conn_.get());
+  quicly_context_t *ctx = quicly_get_context(conn_.get());
+  int64_t delta = timeout_at - ctx->now->cb(ctx->now);
+  if (parent_)
+  base->set_timeout(std::chrono::milliseconds(delta), 
+                    caf::io::transport_atom::value, 0);
+}
+
 int quicly_transport::on_stream_open(quicly_stream_open_t*,
                                      quicly_stream_t* stream) {
   // set stream callbacks for the new stream
@@ -354,12 +359,8 @@ int quicly_transport::on_stream_open(quicly_stream_open_t*,
 }
 
 error quicly_transport::timeout(io::network::newb_base* base, atom_value, uint32_t) {
-  std::cout << "timeout" << std::endl;
   send_pending(fd_, conn_.get());
-  auto timeout = quicly_get_first_timeout(conn_.get());
-  // set next timeout after quicly timeout ms
-  base->set_timeout(std::chrono::milliseconds(100), 
-                    caf::io::transport_atom::value, 0);
+  set_timeout(base);
   return none;
 }
 
