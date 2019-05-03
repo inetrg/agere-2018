@@ -342,12 +342,10 @@ void quicly_transport::set_timeout(io::network::newb_base* base) {
   int64_t delta = timeout_at - ctx->now->cb(ctx->now);
   base->set_timeout(std::chrono::milliseconds(delta), 
                     caf::io::transport_atom::value, 0);
-  std::cout << "set_timeout after " << delta << "ms" << std::endl;
 }
 
 void quicly_transport::reset_timeout(io::network::newb_base* base) {
   base->clock().cancel_timeouts(base);
-  std::cout << "reset_timeout" << std::endl;
 }
 
 int quicly_transport::on_stream_open(quicly_stream_open_t*,
@@ -363,7 +361,6 @@ int quicly_transport::on_stream_open(quicly_stream_open_t*,
 }
 
 error quicly_transport::timeout(io::network::newb_base* base, atom_value, uint32_t) {
-  std::cout << "timeout" << std::endl;
   send_pending(fd_, conn_.get());
   set_timeout(base);
   return none;

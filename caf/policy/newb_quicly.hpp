@@ -284,6 +284,7 @@ public:
                                              ptls_iovec_init(cid_key_,
                                                              strlen(cid_key_)));
 
+    std::cout << host << " : " << port << std::endl;
     if (resolve_address(&sa_, &salen_, host, std::to_string(port).c_str(), AF_INET,
                         SOCK_DGRAM, IPPROTO_UDP) != 0) {
       CAF_LOG_ERROR("resolve address failed");
@@ -401,7 +402,7 @@ public:
       auto ptr = caf::actor_cast<caf::abstract_actor *>(act);
       CAF_ASSERT(ptr != nullptr);
       auto &ref = dynamic_cast<io::newb<Message> &>(*ptr);
-      ref.write_event(base);
+      ref.write_event();
     }
     base->stop_writing();
     return none;

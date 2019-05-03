@@ -1,8 +1,4 @@
-fix read/write_event
-  -> should pass this-ptr to read/write-some for set_timeout
-
 shutdown
   -> graceful_shutdown() should check wether it can shutdown or not
 
 test retransmits
-  -> 
