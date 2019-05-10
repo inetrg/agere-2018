@@ -204,7 +204,7 @@ private:
         return ret;
       }
       if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
-        // pass data to protocol
+        // pass data directly to protocol
         proto->read(reinterpret_cast<char*>(input.base), input.len);
         quicly_streambuf_ingress_shift(stream, input.len);
       }
@@ -267,7 +267,7 @@ public:
       path_to_certs = path;
     } else {
       // try to load default certs
-      path_to_certs = "/home/boss/CLionProjects/quicly-chat/quicly/t/assets/";
+      path_to_certs = "/home/jakob/code/agere-2018/quicly/t/assets/";
     }
     load_certificate_chain(ctx.tls, (path_to_certs + "server.crt").c_str());
     load_private_key(ctx.tls, (path_to_certs + "server.key").c_str());
@@ -284,7 +284,6 @@ public:
                                              ptls_iovec_init(cid_key_,
                                                              strlen(cid_key_)));
 
-    std::cout << host << " : " << port << std::endl;
     if (resolve_address(&sa_, &salen_, host, std::to_string(port).c_str(), AF_INET,
                         SOCK_DGRAM, IPPROTO_UDP) != 0) {
       CAF_LOG_ERROR("resolve address failed");
@@ -426,7 +425,6 @@ private:
     auto& ref = dynamic_cast<io::newb<Message>&>(*ptr);
     static_cast<acceptor_streambuf*>(stream->data)->state = ref.proto.get();
     stream->callbacks = &stream_callbacks;
-
     return 0;
   }
 
@@ -435,7 +433,7 @@ private:
     auto ptr = caf::actor_cast<caf::abstract_actor*>(newb);
     CAF_ASSERT(ptr != nullptr);
     auto& ref = dynamic_cast<io::newb<Message>&>(*ptr);
-    ref.graceful_shutdown(); // TODO: how to properly delete newb?
+    ref.io_error(io::network::operation::read, sec::runtime_error);
     newbs_.erase(conn);
   }
 };
