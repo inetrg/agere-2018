@@ -267,7 +267,7 @@ public:
       path_to_certs = path;
     } else {
       // try to load default certs
-      path_to_certs = "/home/jakob/code/agere-2018/quicly/t/assets/";
+      path_to_certs = "/home/boss/code/agere-2018/quicly/t/assets/";
     }
     load_certificate_chain(ctx.tls, (path_to_certs + "server.crt").c_str());
     load_private_key(ctx.tls, (path_to_certs + "server.key").c_str());

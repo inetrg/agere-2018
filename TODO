@@ -1,4 +1,3 @@
-shutdown
-  -> graceful_shutdown() should check wether it can shutdown or not
-
 test retransmits
+
+global ctx should be member of some quic-obj

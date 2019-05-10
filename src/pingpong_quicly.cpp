@@ -31,127 +31,140 @@ struct state {
 
 behavior server(stateful_broker<state>* self) {
   return {
-          [=](actor responder) {
-              self->state.responder = responder;
-          },
-          [=](const new_connection_msg& msg) {
-              self->configure_read(msg.handle,
-                                   io::receive_policy::exactly(sizeof(uint32_t)));
-              self->state.other = msg.handle;
-          },
-          [=](new_data_msg& msg) {
-              /*
-              uint32_t counter;
-              binary_deserializer bd(self->system(), msg.buf);
-              bd(counter);
-              */
-              self->write(msg.handle, msg.buf.size(), msg.buf.data());
-              self->flush(msg.handle);
-          },
-          [=](const connection_closed_msg&) {
-              self->quit();
-              self->send(self->state.responder, quit_atom::value);
-          }
+    [=](actor responder) {
+      self->state.responder = responder;
+    },
+    [=](const new_connection_msg& msg) {
+      self->configure_read(msg.handle,
+                            io::receive_policy::exactly(sizeof(uint32_t)));
+      self->state.other = msg.handle;
+    },
+    [=](new_data_msg& msg) {
+      /*
+      uint32_t counter;
+      binary_deserializer bd(self->system(), msg.buf);
+      bd(counter);
+      */
+      self->write(msg.handle, msg.buf.size(), msg.buf.data());
+      self->flush(msg.handle);
+    },
+    [=](const connection_closed_msg&) {
+      self->quit();
+      self->send(self->state.responder, quit_atom::value);
+    }
   };
 }
 
 behavior client(stateful_broker<state>* self, connection_handle hdl) {
   self->state.other = hdl;
   return {
-          [=](start_atom, size_t messages, actor responder) {
-              auto& s = self->state;
-              s.responder = responder;
-              s.messages = messages;
-              self->configure_read(s.other, io::receive_policy::exactly(sizeof(uint32_t)));
-              std::vector<char> buf;
-              binary_serializer bs(self->system(), buf);
-              bs(uint32_t(1));
-              self->write(s.other, buf.size(), buf.data());
-              self->flush(s.other);
-          },
-          [=](new_data_msg& msg) {
-              auto& s = self->state;
-              uint32_t counter;
-              binary_deserializer bd(self->system(), msg.buf);
-              bd(counter);
-              s.received_messages += 1;
-              if (s.received_messages % 100 == 0)
-                std::cerr << "got " << s.received_messages << std::endl;
-              if (s.received_messages >= s.messages) {
-                self->send(s.responder, quit_atom::value);
-              } else {
-                std::vector<char> buf;
-                binary_serializer bs(self->system(), buf);
-                bs(counter + 1);
-                self->write(msg.handle, buf.size(), buf.data());
-                self->flush(msg.handle);
-              }
-          },
-          [=](const connection_closed_msg&) {
-              self->quit();
-              self->send(self->state.responder, quit_atom::value);
-          }
+    [=](start_atom, size_t messages, actor responder) {
+      auto& s = self->state;
+      s.responder = responder;
+      s.messages = messages;
+      self->configure_read(s.other, io::receive_policy::exactly(sizeof(uint32_t)));
+      std::vector<char> buf;
+      binary_serializer bs(self->system(), buf);
+      bs(uint32_t(1));
+      self->write(s.other, buf.size(), buf.data());
+      self->flush(s.other);
+    },
+    [=](new_data_msg& msg) {
+      auto& s = self->state;
+      uint32_t counter;
+      binary_deserializer bd(self->system(), msg.buf);
+      bd(counter);
+      s.received_messages += 1;
+      if (s.received_messages % 100 == 0)
+        std::cerr << "got " << s.received_messages << std::endl;
+      if (s.received_messages >= s.messages) {
+        self->send(s.responder, quit_atom::value);
+      } else {
+        std::vector<char> buf;
+        binary_serializer bs(self->system(), buf);
+        bs(counter + 1);
+        self->write(msg.handle, buf.size(), buf.data());
+        self->flush(msg.handle);
+      }
+    },
+    [=](const connection_closed_msg&) {
+      self->quit();
+      self->send(self->state.responder, quit_atom::value);
+    }
   };
 }
 
 
 behavior raw_server(stateful_newb<new_raw_msg, state>* self, actor responder) {
   self->state.responder = responder;
+  auto stop = [=](std::string msg) {
+    std::cerr << msg << std::endl;
+    self->quit();
+    self->stop();
+    self->send(self->state.responder, quit_atom::value);
+  };
+
   return {
-          [=](new_raw_msg& msg) {
-              uint32_t counter;
-              binary_deserializer bd(self->system(), msg.payload, msg.payload_len);
-              bd(counter);
-              auto whdl = self->wr_buf(nullptr);
-              binary_serializer bs(&self->backend(), *whdl.buf);
-              bs(counter);
-          },
-          [=](io_error_msg& msg) {
-              std::cerr << "server got io error: " << to_string(msg.op) << std::endl;
-              self->quit();
-              self->stop();
-              self->send(self->state.responder, quit_atom::value);
-          }
+    [=](new_raw_msg& msg) {
+      uint32_t counter;
+      binary_deserializer bd(self->system(), msg.payload, msg.payload_len);
+      bd(counter);
+      if (counter == 0xFFFFFFFF) {
+        // end of test
+        stop("test ended successfully");
+      }
+      auto whdl = self->wr_buf(nullptr);
+      binary_serializer bs(&self->backend(), *whdl.buf);
+      bs(counter);
+    },
+    [=](io_error_msg& msg) {
+      stop("server got io error: " + to_string(msg.op));
+    }
   };
 }
 
 behavior raw_client(stateful_newb<new_raw_msg, state>* self) {
   return {
-          [=](start_atom, size_t messages, actor responder) {
-              auto& s = self->state;
-              s.responder = responder;
-              s.messages = messages;
-              self->configure_read(io::receive_policy::exactly(sizeof(uint32_t)));
-              auto whdl = self->wr_buf(nullptr);
-              binary_serializer bs(&self->backend(), *whdl.buf);
-              bs(uint32_t(1));
-          },
-          [=](new_raw_msg& msg) {
-              auto& s = self->state;
-              uint32_t counter;
-              binary_deserializer bd(self->system(), msg.payload, msg.payload_len);
-              bd(counter);
-              s.received_messages += 1;
-              if (s.received_messages % 100 == 0) {
-                std::cerr << "got " << s.received_messages << std::endl;
-              }
-              if (s.received_messages >= s.messages) {
-                std::cout << "got all messages!" << std::endl;
-                self->send(s.responder, quit_atom::value);
-                self->stop();
-                self->quit();
-              } else {
-                auto whdl = self->wr_buf(nullptr);
-                binary_serializer bs(&self->backend(), *whdl.buf);
-                bs(counter + 1);
-              }
-          },
-          [=](io_error_msg& msg) {
-              std::cerr << "client got io error: " << to_string(msg.op) << std::endl;
-              self->stop();
-              self->quit();
-              self->send(self->state.responder, quit_atom::value);
-          }
+    [=](start_atom, size_t messages, actor responder) {
+      auto& s = self->state;
+      s.responder = responder;
+      s.messages = messages;
+      self->configure_read(io::receive_policy::exactly(sizeof(uint32_t)));
+      auto whdl = self->wr_buf(nullptr);
+      binary_serializer bs(&self->backend(), *whdl.buf);
+      bs(uint32_t(1));
+    },
+    [=](new_raw_msg& msg) {
+      auto& s = self->state;
+      uint32_t counter;
+      binary_deserializer bd(self->system(), msg.payload, msg.payload_len);
+      bd(counter);
+      s.received_messages += 1;
+      if (s.received_messages % 100 == 0) {
+        std::cerr << "got " << s.received_messages << std::endl;
+      }
+      if (s.received_messages >= s.messages) {
+        std::cout << "got all messages!" << std::endl;
+        // tell server that test is over
+        auto whdl = self->wr_buf(nullptr);
+        binary_serializer bs(&self->backend(), *whdl.buf);
+        bs(uint32_t(0xFFFFFFFF));
+
+        self->send(s.responder, quit_atom::value);
+        self->stop();
+        self->quit();
+      } else {
+        auto whdl = self->wr_buf(nullptr);
+        binary_serializer bs(&self->backend(), *whdl.buf);
+        bs(counter + 1);
+      }
+    },
+    [=](io_error_msg& msg) {
+      std::cerr << "client got io error: " << to_string(msg.op) << std::endl;
+      self->stop();
+      self->quit();
+      self->send(self->state.responder, quit_atom::value);
+    }
   };
 }
 
@@ -181,11 +194,9 @@ void caf_main(actor_system& sys, const config& cfg) {
   scoped_actor self{sys};
 
   auto await_done = [&](std::string msg) {
-      self->receive(
-              [&](quit_atom) {
-                  std::cerr << msg << std::endl;
-              }
-      );
+    self->receive([&](quit_atom) {
+      std::cerr << msg << std::endl;
+    });
   };
   if (!cfg.traditional) {
     if (cfg.is_server) {
