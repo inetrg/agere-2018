@@ -81,6 +81,8 @@ quicly_transport::quicly_transport(quicly_conn_t* conn, int fd,
   save_ticket_{&save_ticket_cb},
   key_exchanges_(),
   tlsctx_(),
+  ctx_(),
+  streambuf_(),
   conn_(conn),
   stream_(nullptr),
   fd_(fd),
@@ -95,8 +97,12 @@ quicly_transport::quicly_transport(quicly_conn_t* conn, int fd,
   configure_read(io::receive_policy::at_most(1024));
   stream_open_.state = this;
   stream_open_.cb = [](quicly_stream_open_t* self, quicly_stream_t* stream) -> int {
-    auto tmp = static_cast<quicly_stream_open_trans*>(self);
-    return tmp->state->on_stream_open(self, stream);
+    auto tmp = reinterpret_cast<quicly_stream_open_trans*>(self);
+    if (tmp) {
+      return tmp->state->on_stream_open(self, stream);
+    } else {
+      return -1;
+    }
   };
   streambuf_.state = this;
 }
@@ -116,22 +122,22 @@ io::network::rw_state quicly_transport::read_some(io::network::newb_base* parent
   vec.iov_len = sizeof(buf);
   mess.msg_iov = &vec;
   mess.msg_iovlen = 1;
-  ssize_t rret;
+  ssize_t receive_ret;
 
   reset_timeout(parent);
 
-  if ((rret = recvmsg(fd_, &mess, 0)) <= 0) {
+  if ((receive_ret = recvmsg(fd_, &mess, 0)) <= 0) {
     return io::network::rw_state::indeterminate;
-  };
+  }
 
-  size_t off = 0;
-  while (off != rret) {
+  ssize_t off = 0;
+  while (off != receive_ret) {
     quicly_decoded_packet_t packet;
-    size_t plen = quicly_decode_packet(&ctx, &packet, buf + off, rret - off);
-    if (plen == SIZE_MAX)
+    auto packet_length = quicly_decode_packet(&ctx_, &packet, buf + off, receive_ret - off);
+    if (packet_length == SIZE_MAX)
       break;
     quicly_receive(conn_.get(), &packet);
-    off += plen;
+    off += packet_length;
   }
 
   if (conn_) {
@@ -272,17 +278,13 @@ quicly_transport::connect(const std::string& host, uint16_t port,
   tlsctx_.require_dhe_on_psk = 1;
   tlsctx_.save_ticket = &save_ticket_;
 
-  ctx = quicly_spec_context;
-  ctx.tls = &tlsctx_;
-  ctx.stream_open = &stream_open_;
-  ctx.closed_by_peer = &closed_by_peer_;
-  
-  // enable logging to std::cerr
-  // ctx.event_log.cb = quicly_new_default_event_logger(stderr);
-  // ctx.event_log.mask = UINT64_MAX;
+  ctx_ = quicly_spec_context;
+  ctx_.tls = &tlsctx_;
+  ctx_.stream_open = &stream_open_;
+  ctx_.closed_by_peer = &closed_by_peer_;
 
-  setup_session_cache(ctx.tls);
-  quicly_amend_ptls_context(ctx.tls);
+  setup_session_cache(ctx_.tls);
+  quicly_amend_ptls_context(ctx_.tls);
 
   key_exchanges_[0] = &ptls_openssl_secp256r1;
   load_ticket(&hs_properties_, &resumed_transport_params_);
@@ -309,7 +311,7 @@ quicly_transport::connect(const std::string& host, uint16_t port,
   }
 
   quicly_conn_t* conn = nullptr;
-  if (quicly_connect(&conn, &ctx, host.c_str(), reinterpret_cast<sockaddr*>(&sa_),
+  if (quicly_connect(&conn, &ctx_, host.c_str(), reinterpret_cast<sockaddr*>(&sa_),
                      salen_, &next_cid_, &hs_properties_,
                      &resumed_transport_params_)) {
     CAF_LOG_ERROR("quicly_connect failed");

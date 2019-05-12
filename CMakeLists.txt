@@ -134,7 +134,7 @@ include_directories(caf/policy)
 
 add_executable(pingpong_quicly
                src/newb_quicly.cpp
-               src/quicly_stuff.cpp
+               src/quicly_cb.cpp
                src/pingpong_quicly.cpp)
 
 target_link_libraries(pingpong_quicly

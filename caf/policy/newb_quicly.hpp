@@ -24,7 +24,7 @@
 #include "caf/io/network/newb_base.hpp"
 #include "caf/policy/accept.hpp"
 #include "caf/policy/transport.hpp"
-#include "quicly_stuff.hpp"
+#include "quicly_cb.hpp"
 #include <map>
 
 namespace caf {
@@ -71,8 +71,6 @@ struct quicly_transport : public transport {
   quicly_transport(quicly_conn_t* conn, int fd, io::network::acceptor_base* parent, bool connected);
 
   quicly_transport();
-
-  ~quicly_transport() = default;
 
   io::network::rw_state read_some(io::network::newb_base* parent) override;
 
@@ -141,10 +139,11 @@ private:
   quicly_transport_parameters_t resumed_transport_params_;
   quicly_closed_by_peer_t closed_by_peer_;
   quicly_stream_open_trans stream_open_;
-  transport_streambuf streambuf_;
   ptls_save_ticket_t save_ticket_;
   ptls_key_exchange_algorithm_t *key_exchanges_[128];
   ptls_context_t tlsctx_;
+  quicly_context_t ctx_;
+  transport_streambuf streambuf_;
   quicly_conn_t_ptr conn_;
   quicly_stream_t* stream_;
   int fd_;
@@ -183,12 +182,12 @@ private:
   ptls_save_ticket_t save_ticket_;
   ptls_key_exchange_algorithm_t *key_exchanges_[128];
   ptls_context_t tlsctx_;
+  quicly_context_t ctx_;
   bool enforce_retry_;
   sockaddr sa_;
   socklen_t salen_;
   std::map<quicly_conn_t*, actor> newbs_;
   quicly_stream_open_accept<Message> stream_open_;
-  transport_streambuf streambuf_;
 
   // quicly state
   quicly_stream_callbacks_t stream_callbacks = {
@@ -216,11 +215,14 @@ private:
 public:
   accept_quicly() :
     accept<Message>(true),
+    cid_key_(),
     next_cid_(),
     hs_properties_(),
     closed_by_peer_(),
     save_ticket_(),
+    key_exchanges_(),
     tlsctx_(),
+    ctx_(),
     enforce_retry_(false),
     sa_(),
     salen_(0)
@@ -253,13 +255,13 @@ public:
     tlsctx_.require_dhe_on_psk = 1;
     tlsctx_.save_ticket = &save_ticket_;
 
-    ctx = quicly_spec_context;
-    ctx.tls = &tlsctx_;
-    ctx.stream_open = &stream_open_;
-    ctx.closed_by_peer = &closed_by_peer_;
+    ctx_ = quicly_spec_context;
+    ctx_.tls = &tlsctx_;
+    ctx_.stream_open = &stream_open_;
+    ctx_.closed_by_peer = &closed_by_peer_;
 
-    setup_session_cache(ctx.tls);
-    quicly_amend_ptls_context(ctx.tls);
+    setup_session_cache(ctx_.tls);
+    quicly_amend_ptls_context(ctx_.tls);
 
     std::string path_to_certs;
     char* path = getenv("QUICLY_CERTS");
@@ -269,8 +271,8 @@ public:
       // try to load default certs
       path_to_certs = "/home/boss/code/agere-2018/quicly/t/assets/";
     }
-    load_certificate_chain(ctx.tls, (path_to_certs + "server.crt").c_str());
-    load_private_key(ctx.tls, (path_to_certs + "server.key").c_str());
+    load_certificate_chain(ctx_.tls, (path_to_certs + "server.crt").c_str());
+    load_private_key(ctx_.tls, (path_to_certs + "server.key").c_str());
 
     key_exchanges_[0] = &ptls_openssl_secp256r1;
 
@@ -278,7 +280,7 @@ public:
     tlsctx_.random_bytes(random_key, sizeof(random_key) - 1);
     memcpy(cid_key_, random_key, sizeof(random_key)); // save cid_key
 
-    ctx.cid_encryptor =
+    ctx_.cid_encryptor =
             quicly_new_default_cid_encryptor(&ptls_openssl_bfecb,
                                              &ptls_openssl_sha256,
                                              ptls_iovec_init(cid_key_,
@@ -339,12 +341,12 @@ public:
     size_t off = 0;
     while (off != rret) {
       quicly_decoded_packet_t packet;
-      size_t plen = quicly_decode_packet(&ctx, &packet, buf + off, rret - off);
+      size_t plen = quicly_decode_packet(&ctx_, &packet, buf + off, rret - off);
       if (plen == SIZE_MAX)
         break;
       if (QUICLY_PACKET_IS_LONG_HEADER(packet.octets.base[0])) {
         if (packet.version != QUICLY_PROTOCOL_VERSION) {
-          quicly_datagram_t* rp = quicly_send_version_negotiation(&ctx, &sa,
+          quicly_datagram_t* rp = quicly_send_version_negotiation(&ctx_, &sa,
                   salen_, packet.cid.src, packet.cid.dest.encrypted);
           assert(rp != nullptr);
           if (send_one(fd_, rp) == -1)
@@ -365,7 +367,7 @@ public:
       } else if (QUICLY_PACKET_IS_LONG_HEADER(packet.octets.base[0])) {
         /* new connection */
         quicly_conn_t* conn = nullptr;
-        int ret = quicly_accept(&conn, &ctx, &sa, mess.msg_namelen, &packet,
+        int ret = quicly_accept(&conn, &ctx_, &sa, mess.msg_namelen, &packet,
                                 enforce_retry_ ? packet.token /* a production server should validate the token */
                                                : ptls_iovec_init(nullptr, 0),
                                 &next_cid_, nullptr);
@@ -380,7 +382,7 @@ public:
          * because loop is prevented by authenticating the CID (by checking node_id and thread_id). If the peer is also
          * sending a reset, then the next CID is highly likely to contain a non-authenticating CID, ... */
         if (packet.cid.dest.plaintext.node_id == 0 && packet.cid.dest.plaintext.thread_id == 0) {
-          quicly_datagram_t *dgram = quicly_send_stateless_reset(&ctx, &sa, salen_, packet.cid.dest.encrypted.base);
+          quicly_datagram_t *dgram = quicly_send_stateless_reset(&ctx_, &sa, salen_, packet.cid.dest.encrypted.base);
           if (send_one(fd_, dgram) == -1)
             CAF_LOG_ERROR("could not send stateless reset");
         }
