@@ -6,6 +6,10 @@ evaluation/pingpong/udp*.err
 evaluation/pingpong/udp*.out
 evaluation/pingpong/tcp*.err
 evaluation/pingpong/tcp*.out
+evaluation/pingpong/quic*.err
+evaluation/pingpong/quic*.out
+evaluation/*.log
+evaluation/pingpong/*.csv
 figs/*.tikz
 figs/*.pdf
 
@@ -13,10 +17,6 @@ figs/*.pdf
 __pycache__/
 *.py[cod]
 *$py.class
-
-### CLion ###
-.idea/
-cmake-build-debug/
 
 ### vscode ###
 .vscode/

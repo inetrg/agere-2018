@@ -1,6 +1,7 @@
 #!/bin/bash
 
 ROOT_DIR=$(pwd)
+cmake=/home/otto/cmake-3.14.3/bin/cmake
 
 cores=4
 if [ "$(uname)" == "Darwin" ]; then

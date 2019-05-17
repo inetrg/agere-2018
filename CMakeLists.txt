@@ -132,12 +132,12 @@ include_directories(caf)
 include_directories(caf/detail)
 include_directories(caf/policy)
 
-add_executable(pingpong_quicly
+add_executable(pingpong_quic
                src/newb_quicly.cpp
                src/quicly_cb.cpp
                src/pingpong_quicly.cpp)
 
-target_link_libraries(pingpong_quicly
+target_link_libraries(pingpong_quic
                       ${CMAKE_DL_LIBS}
                       ${CAF_LIBRARY_IO}
                       ${CAF_LIBRARY_CORE}

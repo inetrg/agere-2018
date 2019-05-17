@@ -1,13 +1,17 @@
 #!/usr/bin/python
 
-mininet_path = '/usr/local/lib/python2.7/dist-packages/mininet-2.2.2-py2.7.egg'
+#mininet_path = '/usr/local/lib/python2.7/dist-packages/mininet-2.2.2-py2.7.egg'
 #mininet_path = '/usr/local/lib/python2.7/dist-packages/mininet-2.3.0d4-py2.7.egg'
 
 import time
 import sys
 import argparse
 
-sys.path.insert(0, mininet_path)
+#sys.path.insert(0, mininet_path)
+
+print(sys.path)
+
+import mininet
 
 from mininet.topo import Topo
 from mininet.net import Mininet
@@ -22,7 +26,7 @@ from time import sleep
 class TwoHostsTopology(Topo):
     "The peer to peer topology for our benchmark."
 
-    def build(self):
+    def build(self, n=2):
         "Build two nodes with a direct link"
 
         # Add two hosts.
@@ -176,7 +180,8 @@ def main():
         sleep(1)
 
         print("Starting client")
-        clientcommand = '../build/bin/{} -m 2000 --host=\\"{}\\" {}'.format(prog, h1.IP(), caf_opts)
+	# previous --host=\\"{}\\" ...
+        clientcommand = '../build/bin/{} -m 2000 --host={} {}'.format(prog, h1.IP(), caf_opts)
         print('> {}'.format(clientcommand))
         # h2.cmdPrint(clientcommand)
         # p2 = int(h2.cmd('echo $!'))

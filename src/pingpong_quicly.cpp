@@ -124,6 +124,9 @@ behavior raw_server(stateful_newb<new_raw_msg, state>* self, actor responder) {
 }
 
 behavior raw_client(stateful_newb<new_raw_msg, state>* self) {
+  auto n = actor_clock::clock_type::now();
+  auto timeout = std::chrono::milliseconds(25);
+  self->clock().set_multi_timeout(n+timeout, self, io::transport_atom::value, 0);
   return {
     [=](start_atom, size_t messages, actor responder) {
       auto& s = self->state;
@@ -144,7 +147,6 @@ behavior raw_client(stateful_newb<new_raw_msg, state>* self) {
         std::cerr << "got " << s.received_messages << std::endl;
       }
       if (s.received_messages >= s.messages) {
-        std::cout << "got all messages!" << std::endl;
         // tell server that test is over
         auto whdl = self->wr_buf(nullptr);
         binary_serializer bs(&self->backend(), *whdl.buf);
