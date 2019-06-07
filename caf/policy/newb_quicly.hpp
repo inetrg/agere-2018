@@ -183,7 +183,6 @@ private:
   ptls_key_exchange_algorithm_t *key_exchanges_[128];
   ptls_context_t tlsctx_;
   quicly_context_t ctx_;
-  bool enforce_retry_;
   sockaddr sa_;
   socklen_t salen_;
   std::map<quicly_conn_t*, actor> newbs_;
@@ -223,7 +222,6 @@ public:
     key_exchanges_(),
     tlsctx_(),
     ctx_(),
-    enforce_retry_(false),
     sa_(),
     salen_(0)
   {
@@ -269,7 +267,7 @@ public:
       path_to_certs = path;
     } else {
       // try to load default certs
-      path_to_certs = "/home/boss/code/agere-2018/quicly/t/assets/";
+      path_to_certs = "/home/jakob/code/agere-2018/quicly/t/assets/";
     }
     load_certificate_chain(ctx_.tls, (path_to_certs + "server.crt").c_str());
     load_private_key(ctx_.tls, (path_to_certs + "server.key").c_str());
@@ -368,9 +366,7 @@ public:
         /* new connection */
         quicly_conn_t* conn = nullptr;
         int ret = quicly_accept(&conn, &ctx_, &sa, mess.msg_namelen, &packet,
-                                enforce_retry_ ? packet.token /* a production server should validate the token */
-                                               : ptls_iovec_init(nullptr, 0),
-                                &next_cid_, nullptr);
+                                packet.token, &next_cid_, nullptr);
         if (ret == 0 && conn) {
             ++next_cid_.master_id;
             accept_connection(conn, base);

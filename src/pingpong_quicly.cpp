@@ -99,9 +99,9 @@ behavior raw_server(stateful_newb<new_raw_msg, state>* self, actor responder) {
   self->state.responder = responder;
   auto stop = [=](std::string msg) {
     std::cerr << msg << std::endl;
-    self->quit();
-    self->stop();
     self->send(self->state.responder, quit_atom::value);
+    self->stop();
+    self->quit();
   };
 
   return {
@@ -212,11 +212,8 @@ void caf_main(actor_system& sys, const config& cfg) {
       }
       auto server = std::move(*eserver);
       await_done("done");
-      /*std::string dummy;
-      std::getline(std::cin, dummy);*/
       std::cerr << "stopping server" << std::endl;
       self->send_exit(server, caf::exit_reason::user_shutdown);
-      std::this_thread::sleep_for(std::chrono::seconds(1));
     } else {
       std::cerr << "creating client" << std::endl;
       transport_ptr pol{new quicly_transport};
@@ -235,7 +232,7 @@ void caf_main(actor_system& sys, const config& cfg) {
       auto end = system_clock::now();
       std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
                 << std::endl;
-      //self->send(client, exit_reason::user_shutdown);
+      self->send(client, exit_reason::user_shutdown);
     }
   } else {
     if (cfg.is_server) {

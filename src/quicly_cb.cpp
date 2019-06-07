@@ -4,6 +4,7 @@
 
 #include "detail/quicly_cb.hpp"
 #include <iostream>
+#include <fstream>
 
 constexpr char ticket_file[] = "ticket.bin";
 
@@ -74,10 +75,11 @@ int send_pending(int fd, quicly_conn_t *conn) {
 }
 
 int save_ticket_cb(ptls_save_ticket_t*, ptls_t *tls, ptls_iovec_t src) {
+  using namespace std;
   auto conn = static_cast<quicly_conn_t*>(*ptls_get_data_ptr(tls));
   ptls_buffer_t buf;
   char smallbuff[512];
-  FILE *fp = nullptr;
+  ofstream fticket(ticket_file, ios::app | ios::binary);
   int ret = 0;
   ptls_buffer_init(&buf, smallbuff, 0);
 
@@ -89,34 +91,32 @@ int save_ticket_cb(ptls_save_ticket_t*, ptls_t *tls, ptls_iovec_t src) {
   });
 
   /* write file */
-  if ((fp = fopen(ticket_file, "wb")) == nullptr) {
+  if (fticket.is_open()) {
+    fticket.write(reinterpret_cast<char*>(buf.base), buf.off);
+  } else {
     std::cerr << "failed to open file:" << ticket_file << ":" << strerror(errno) << std::endl;
     goto Exit;
   }
-  fwrite(buf.base, 1, buf.off, fp);
 
   Exit:
-  if (fp != nullptr)
-    fclose(fp);
+  if (fticket.is_open())
+    fticket.close();
   ptls_buffer_dispose(&buf);
   return 0;
 }
 
 void load_ticket(ptls_handshake_properties_t* hs_properties,
                  quicly_transport_parameters_t* resumed_transport_params) {
+  using namespace std;
   static uint8_t buf[65536];
-  size_t len;
+  size_t len = 1;
   int ret = 0;
+  ifstream fticket(ticket_file, ios::binary);
 
-  FILE *fp;
-  if ((fp = fopen(ticket_file, "rb")) == nullptr)
+  if (!fticket.is_open())
     return;
-  len = fread(buf, 1, sizeof(buf), fp);
-  if (len == 0 || !feof(fp)) {
-    fprintf(stderr, "failed to load ticket from file:%s\n", ticket_file);
-    exit(1);
-  }
-  fclose(fp);
+  fticket.read(reinterpret_cast<char*>(buf), sizeof(buf));
+  fticket.close();
 
   const uint8_t *src = buf, *end = buf + len;
   ptls_iovec_t ticket;
