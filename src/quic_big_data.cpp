@@ -139,22 +139,29 @@ void caf_main(actor_system& sys, const config& cfg) {
   };
 
   std::string file_name = "";
+  char* path = getenv("DATA_PATH");
+  if(!path) {
+    std::cerr << "data_path env var not specified" << std::endl;
+    return;
+  }
+  std::string data_path(path);
+
   uint64_t file_length = 0;
   switch (types.at(cfg.bench_type)) {
     case ONE:
-      file_name = "/home/jakob/code/agere-2018/data/1M-file";
+      file_name = data_path + "/1M-file";
       file_length = 1048576;
       break;
     case TEN:
-      file_name = "/home/jakob/code/agere-2018/data/10M-file";
+      file_name = data_path + "/10M-file";
       file_length = 10485760;
       break;
     case HUNDRED:
-      file_name = "/home/jakob/code/agere-2018/data/100M-file";
+      file_name = data_path + "/100M-file";
       file_length = 104857600;
       break;
     case THOUSAND:
-      file_name = "/home/jakob/code/agere-2018/data/1G-file";
+      file_name = data_path + "/1G-file";
       file_length = 1073741824;
       break;
     default:
