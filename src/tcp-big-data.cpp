@@ -20,10 +20,14 @@ using send_atom = atom_constant<atom("send")>;
 using quit_atom = atom_constant<atom("quit")>;
 using responder_atom = atom_constant<atom("responder")>;
 using config_atom = atom_constant<atom("config")>;
+using init_atom = atom_constant<atom("init")>;
 
 struct state {
   actor responder;
   uint64_t received;
+  uint64_t file_length;
+  connection_handle other;
+
 };
 
 
@@ -98,6 +102,69 @@ behavior client(stateful_newb<new_raw_msg, state>* self, actor responder) {
   };
 }
 
+
+behavior tcp_server(stateful_broker<state>* self) {
+  auto stop = [=](std::string msg) {
+    std::cerr << msg << std::endl;
+    self->quit();
+    self->send(self->state.responder, quit_atom::value);
+  };
+
+  return {
+    [=](init_atom, actor responder, uint64_t length) {
+      self->state.responder = responder;
+      self->state.file_length = length;
+    },
+    [=](const new_connection_msg& msg) {
+    },
+    [=](new_data_msg& msg) {
+      self->state.received += msg.buf.size();
+      if (self->state.received >= self->state.file_length) {
+        char response = 'k';
+        self->write(msg.handle, 1, &response);
+        self->flush(msg.handle);
+        stop("bench done");    
+      }
+    },
+    [=](const connection_closed_msg&) {
+      stop("server got io error");
+    }
+  };
+}
+
+behavior tcp_client(stateful_broker<state>* self, connection_handle hdl) {
+  self->state.other = hdl;
+  auto stop = [=](std::string msg) {
+    std::cerr << msg << std::endl;
+    self->quit();
+    self->send(self->state.responder, quit_atom::value);
+  };
+
+
+  return {
+    [=](init_atom, actor responder) {
+      self->state.responder = responder;
+    },
+    [=](send_atom, std::vector<char>& buf) {
+      auto& s = self->state;
+      self->write(s.other, buf.size(), buf.data());
+      self->flush(s.other);
+      return 0;
+    },
+    [=](new_data_msg& msg) {
+      if (msg.buf[0] == 'k') {
+        stop("test done");
+      }
+      return 0;
+    },
+    [=](const connection_closed_msg&) {
+      stop("client got io error");
+    }
+  };
+}
+
+
+
 class config : public actor_system_config {
 public:
   uint16_t port = 4433;
@@ -105,6 +172,7 @@ public:
   bool is_server = false;
   bool prbs = false;
   std::string bench_type = "1M";
+  bool traditional = false;
 
   config() {
     add_message_type<std::vector<char>>("std::vector<char>");
@@ -112,7 +180,8 @@ public:
             .add(port, "port,P", "set port")
             .add(host, "host,H", "set host")
             .add(is_server, "server,s", "set server")
-            .add(bench_type, "bench_type,b", "type of benchmark [1M|10M|100M|1G]");
+            .add(bench_type, "bench_type,b", "type of benchmark [1M|10M|100M|1G]")
+            .add(traditional, "traditional,t", "use traditional style brokers");  
   }
 };
 
@@ -170,51 +239,85 @@ void caf_main(actor_system& sys, const config& cfg) {
       return;
   }
 
-  if (cfg.is_server) {
-    std::cerr << "creating server" << std::endl;
-    accept_ptr<policy::new_raw_msg> pol{new accept_tcp<policy::new_raw_msg>};
-    auto eserver = spawn_server<proto_t>(sys, server, std::move(pol), port,
-                                        nullptr, true, self, file_length);
-    if (!eserver) {
-      std::cerr << "failed to start server on port " << port << std::endl;
-      return;
-    }
-    auto server = std::move(*eserver);
-    await_done("done");
-    std::cerr << "stopping server" << std::endl;
-    self->send_exit(server, caf::exit_reason::user_shutdown);
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-  } else {
-    std::cerr << "creating client" << std::endl;
-    transport_ptr pol{new tcp_transport};
-    auto eclient = spawn_client<proto_t>(sys, client, std::move(pol),
-                                          host, port, self);
-    if (!eclient) {
-      std::cerr << "failed to start client for " << host << ":" << port
-                << std::endl;
-      return;
-    }
-    auto client = std::move(*eclient);
-    auto start = system_clock::now();
+  if (!cfg.traditional) {
+    if (cfg.is_server) {
+      std::cerr << "creating server" << std::endl;
+      accept_ptr<policy::new_raw_msg> pol{new accept_tcp<policy::new_raw_msg>};
+      auto eserver = spawn_server<proto_t>(sys, server, std::move(pol), port,
+                                          nullptr, true, self, file_length);
+      if (!eserver) {
+        std::cerr << "failed to start server on port " << port << std::endl;
+        return;
+      }
+      auto server = std::move(*eserver);
+      await_done("done");
+      std::cerr << "stopping server" << std::endl;
+      self->send_exit(server, caf::exit_reason::user_shutdown);
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    } else {
+      std::cerr << "creating client" << std::endl;
+      transport_ptr pol{new tcp_transport};
+      auto eclient = spawn_client<proto_t>(sys, client, std::move(pol),
+                                            host, port, self);
+      if (!eclient) {
+        std::cerr << "failed to start client for " << host << ":" << port
+                  << std::endl;
+        return;
+      }
+      auto client = std::move(*eclient);
+      auto start = system_clock::now();
 
-    std::ifstream file(file_name);
-    if (!file.is_open()) {
-      std::cerr << "could not open file!!" << std::endl;
-      return;
+      std::ifstream file(file_name);
+      if (!file.is_open()) {
+        std::cerr << "could not open file!!" << std::endl;
+        return;
+      }
+            
+      std::vector<char> buf;
+      buf.resize(1024);
+      while(file.read(buf.data(), buf.size())) {
+        self->send(client, send_atom::value, buf);
+        self->receive([&](int x) {});
+      }
+      
+      await_done("done");
+      auto end = system_clock::now();
+      std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
+                << std::endl;
+      //self->send(client, exit_reason::user_shutdown);
     }
-          
-    std::vector<char> buf;
-    buf.resize(1024);
-    while(file.read(buf.data(), buf.size())) {
-      self->send(client, send_atom::value, buf);
-      self->receive([&](int x) {});
+  } else {
+    if (cfg.is_server) {
+      std::cerr << "creating traditional server" << std::endl;
+      auto es = sys.middleman().spawn_server(tcp_server, port);
+      self->send(*es, init_atom::value, self, file_length);
+      await_done("done");
+    } else {
+      std::cerr << "creating traditional client" << std::endl;
+      auto ec = sys.middleman().spawn_client(tcp_client, host, port);
+      auto start = system_clock::now();
+      
+      self->send(*ec, init_atom::value, actor_cast<actor>(self));
+
+      std::ifstream file(file_name);
+      if (!file.is_open()) {
+        std::cerr << "could not open file!!" << std::endl;
+        return;
+      }
+            
+      std::vector<char> buf;
+      buf.resize(1024);
+      while(file.read(buf.data(), buf.size())) {
+        self->send(*ec, send_atom::value, buf);
+        self->receive([&](int x) {});
+      }
+      
+
+      await_done("done");
+      auto end = system_clock::now();
+      std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
+                << std::endl;
     }
-    
-    await_done("done");
-    auto end = system_clock::now();
-    std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
-              << std::endl;
-    //self->send(client, exit_reason::user_shutdown);
   }
 }
 
