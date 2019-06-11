@@ -1,53 +1,35 @@
 #!/bin/bash
 
+function mininet_bench() {
+	for i in {0..10}
+	do
+		./mininet_bench.py $1 $2 $i $3 $4 $5 $6 
+	done
+}
+
 ## without delay ##
 # quic
-#for i in {0..10}
-#do
-#	./mininet_bench.py -q -l $i -r 10
-#done
+mininet_bench() -q -l -r 10 
 
 #tcp
-#for i in {0..10}
-#do
-#	./mininet_bench.py -t -l $i -r 10
-#done
+mininet_bench() -t -l -r 10
 
 # reliable udp
-#for i in {0..10}
-#do
-#	./mininet_bench.py -u -l $i -r 10
-#done
+mininet_bench() -u -l -r 10
 
 # reliable udp + ordering
-#for i in {0..10}
-#do
-#	./mininet_bench.py -u -l $i -r 10 -o
-#done
-#
-#
-### with 10ms delay ##
+mininet_bench() -u -l -r 10 -o
+
+# with 10ms delay ##
 # quic
-#for i in {0..10}
-#do
-#./mininet_bench.py -q -l 10 -r 10 -d 10
-#done
+mininet_bench() -q -l -r 10 -d 10
 
 #tcp
-#for i in {6..10}
-#do
-	#./mininet_bench.py -t -l $i -r 10 -d 10
-#done
+mininet_bench() -t -l -r 10 -d 10
 
 # reliable udp
-#for i in {5..10}
-#do
-#	./mininet_bench.py -u -l $i -r 10 -d 10
-#done
+mininet_bench() -u -l -r 10 -d 10
 
 # reliable udp + ordering
-for i in {0..10}
-do
-        ./mininet_bench.py -u -l $i -r 10 -o -d 10
-done
+mininet_bench() -u -l -r 10 -o -d 10
 
