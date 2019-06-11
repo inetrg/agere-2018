@@ -22,7 +22,7 @@ __pycache__/
 
 ### vscode ###
 .vscode/
-
+**/*.idea/
 ### libs ###
 picotls/
 quicly/

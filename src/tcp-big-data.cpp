@@ -4,10 +4,9 @@
 #include "caf/detail/call_cfun.hpp"
 #include "caf/io/newb.hpp"
 #include "caf/logger.hpp"
-#include "newb_quicly.hpp"
+#include "caf/policy/newb_tcp.hpp"
 #include "caf/policy/newb_raw.hpp"
 #include "caf/io/broker.hpp"
-#include <unordered_map>
 
 using namespace caf;
 using namespace caf::io;
@@ -119,15 +118,18 @@ public:
 
 void caf_main(actor_system& sys, const config& cfg) {
   using namespace std::chrono;
-  using proto_t = quicly_protocol<raw>;
+  using proto_t = tcp_protocol<raw>;
+  //using acceptor_t = tcp_acceptor<proto_t>;
   const char* host = cfg.host.c_str();
   const uint16_t port = cfg.port;
   scoped_actor self{sys};
 
   auto await_done = [&](std::string msg) {
-    self->receive([&](quit_atom) {
-      std::cerr << msg << std::endl;
-    });
+    self->receive(
+      [&](quit_atom) {
+        std::cerr << msg << std::endl;
+      }
+    );
   };
 
   std::unordered_map<std::string, bench_type> types {
@@ -169,10 +171,10 @@ void caf_main(actor_system& sys, const config& cfg) {
   }
 
   if (cfg.is_server) {
-    std::cerr << "creating server on port " << cfg.port << std::endl;
-    accept_ptr<policy::new_raw_msg> pol{new accept_quicly<policy::new_raw_msg>};
+    std::cerr << "creating server" << std::endl;
+    accept_ptr<policy::new_raw_msg> pol{new accept_tcp<policy::new_raw_msg>};
     auto eserver = spawn_server<proto_t>(sys, server, std::move(pol), port,
-                                          nullptr, true, self, file_length);
+                                        nullptr, true, self, file_length);
     if (!eserver) {
       std::cerr << "failed to start server on port " << port << std::endl;
       return;
@@ -181,9 +183,10 @@ void caf_main(actor_system& sys, const config& cfg) {
     await_done("done");
     std::cerr << "stopping server" << std::endl;
     self->send_exit(server, caf::exit_reason::user_shutdown);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
   } else {
     std::cerr << "creating client" << std::endl;
-    transport_ptr pol{new quicly_transport};
+    transport_ptr pol{new tcp_transport};
     auto eclient = spawn_client<proto_t>(sys, client, std::move(pol),
                                           host, port, self);
     if (!eclient) {
@@ -206,12 +209,12 @@ void caf_main(actor_system& sys, const config& cfg) {
       self->send(client, send_atom::value, buf);
       self->receive([&](int x) {});
     }
-
+    
     await_done("done");
     auto end = system_clock::now();
     std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
               << std::endl;
-    self->send(client, exit_reason::user_shutdown);
+    //self->send(client, exit_reason::user_shutdown);
   }
 }
 
