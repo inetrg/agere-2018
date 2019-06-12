@@ -30,7 +30,8 @@ function traditional_tcp_bench {
         do
                 echo "round $i"
                 ./tcp_big_data -t -s -b $1 1>$out_path/traditional-tcp-server-$1-$i.out 2>$out_path/traditional-tcp-server-$1-$i.err &
-                ./tcp_big_data -t -b $1 1>$out_path/traditional-tcp-client-$1-$i.out 2>$out_path/traditional-tcp-client-$1-$i.err
+		sleep 0.1
+		./tcp_big_data -t -b $1 1>$out_path/traditional-tcp-client-$1-$i.out 2>$out_path/traditional-tcp-client-$1-$i.err
         done
 }
 
@@ -57,11 +58,11 @@ cd $ROOT_DIR/build/bin
 #	quic_bench $size
 #done
 
-echo "starting tcp benchmark now"
-for size in 1M 10M 100M 1G
-do
-	tcp_bench $size
-done
+#echo "starting tcp benchmark now"
+#for size in 1M 10M 100M 1G
+#do
+#	tcp_bench $size
+#done
 
 echo "starting traditional tcp benchmark now"
 echo "starting tcp benchmark now"

@@ -107,8 +107,13 @@ behavior tcp_server(stateful_broker<state>* self) {
   };
 
   return {
-    [=](init_atom, actor responder, uint64_t length) {
+    [=](init_atom, uint16_t port, actor responder, uint64_t length) {
       std::cerr << "init" << std::endl;
+      auto res = self->add_tcp_doorman(port, nullptr, true);
+      if (!res) {
+        stop(self->system().render(res.error()));
+      }
+
       self->state.responder = responder;
       self->state.file_length = length;
       self->state.received = 0;
@@ -296,8 +301,8 @@ void caf_main(actor_system& sys, const config& cfg) {
   } else {
     if (cfg.is_server) {
       std::cerr << "creating traditional server" << std::endl;
-      auto es = sys.middleman().spawn_server(tcp_server, port);
-      self->send(*es, init_atom::value, self, file_length);
+      auto es = sys.middleman().spawn_broker(tcp_server);
+      self->send(es, init_atom::value, port, actor_cast<actor>(self), file_length);
       await_done("done");
     } else {
       std::cerr << "creating traditional client" << std::endl;

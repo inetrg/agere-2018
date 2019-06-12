@@ -232,6 +232,33 @@ void caf_main(actor_system& sys, const config& cfg) {
       auto end = system_clock::now();
       std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
                 << std::endl;
+
+      auto ptr = caf::actor_cast<caf::abstract_actor *>(client);
+      CAF_ASSERT(ptr != nullptr);
+      auto &ref = dynamic_cast<io::newb<policy::raw> &>(*ptr);
+
+      auto start_ts = ref.get_start_timestamps();
+      auto stop_ts_pre_quic = ref.get_stop_timestamps_pre_quic();
+      auto stop_ts_post_quic = ref.get_stop_timestamps_post_quic();
+
+      std::cerr << "timestamp lengths = " << start_ts.size()
+                << "\n" << stop_ts_pre_quic.size()
+                << "\n" << stop_ts_post_quic.size() << std::endl;
+
+
+      std::vector<std::chrono::milliseconds> pre_durations;
+      std::vector<std::chrono::milliseconds> post_durations;
+      
+      for (int i = 0; i < start_ts.size(); ++i) {
+        pre_durations.push_back(stop_ts_pre_quic.at(i) - start_ts.at(i));
+        post_durations.push_back(stop_ts_pre_quic.at(i) - start_ts.at(i));
+      }
+
+      for (int i = 0; i < pre_durations.size(); ++i){
+
+      }
+
+
       self->send(client, exit_reason::user_shutdown);
     }
   } else {
