@@ -27,7 +27,6 @@ struct state {
   uint64_t received;
   uint64_t file_length;
   connection_handle other;
-
 };
 
 
@@ -67,9 +66,6 @@ behavior server(stateful_newb<new_raw_msg, state>* self, actor responder, uint64
 
 behavior client(stateful_newb<new_raw_msg, state>* self, actor responder) {
   self->state.responder = responder;
-  auto n = actor_clock::clock_type::now();
-  auto timeout = std::chrono::milliseconds(25);
-  self->clock().set_multi_timeout(n+timeout, self, io::transport_atom::value, 0);
   auto stop = [=](std::string msg) {
     std::cerr << msg << std::endl;
     self->send(self->state.responder, quit_atom::value);
@@ -112,13 +108,21 @@ behavior tcp_server(stateful_broker<state>* self) {
 
   return {
     [=](init_atom, actor responder, uint64_t length) {
+      std::cerr << "init" << std::endl;
       self->state.responder = responder;
       self->state.file_length = length;
+      self->state.received = 0;
     },
     [=](const new_connection_msg& msg) {
+      std::cerr << "new connection" << std::endl;
+      self->state.other = msg.handle;
+      self->configure_read(msg.handle,
+                           io::receive_policy::at_most(1024));
     },
     [=](new_data_msg& msg) {
+      std::cerr << "received " << msg.buf.size() << " Bytes" << std::endl;
       self->state.received += msg.buf.size();
+      std::cerr << "state.received = " << self->state.received << std::endl;
       if (self->state.received >= self->state.file_length) {
         char response = 'k';
         self->write(msg.handle, 1, &response);
@@ -134,18 +138,21 @@ behavior tcp_server(stateful_broker<state>* self) {
 
 behavior tcp_client(stateful_broker<state>* self, connection_handle hdl) {
   self->state.other = hdl;
+  self->configure_read(hdl,
+                           io::receive_policy::at_most(1024));
   auto stop = [=](std::string msg) {
     std::cerr << msg << std::endl;
     self->quit();
     self->send(self->state.responder, quit_atom::value);
   };
 
-
   return {
     [=](init_atom, actor responder) {
       self->state.responder = responder;
+      return 0;
     },
     [=](send_atom, std::vector<char>& buf) {
+      std::cerr << "sending " << buf.size() << " bytes" << std::endl;
       auto& s = self->state;
       self->write(s.other, buf.size(), buf.data());
       self->flush(s.other);
@@ -167,7 +174,7 @@ behavior tcp_client(stateful_broker<state>* self, connection_handle hdl) {
 
 class config : public actor_system_config {
 public:
-  uint16_t port = 4433;
+  uint16_t port = 12345;
   std::string host = "localhost";
   bool is_server = false;
   bool prbs = false;
@@ -295,15 +302,20 @@ void caf_main(actor_system& sys, const config& cfg) {
     } else {
       std::cerr << "creating traditional client" << std::endl;
       auto ec = sys.middleman().spawn_client(tcp_client, host, port);
+      std::cerr << "created traditional client" << std::endl;
       auto start = system_clock::now();
       
+      std::cerr << "sending init atom" << std::endl;
       self->send(*ec, init_atom::value, actor_cast<actor>(self));
+      self->receive([=](int i) {});
+      std::cerr << "sent init atom" << std::endl;
 
       std::ifstream file(file_name);
       if (!file.is_open()) {
         std::cerr << "could not open file!!" << std::endl;
         return;
       }
+      std::cerr << "file opened" << std::endl;
             
       std::vector<char> buf;
       buf.resize(1024);
@@ -312,7 +324,6 @@ void caf_main(actor_system& sys, const config& cfg) {
         self->receive([&](int x) {});
       }
       
-
       await_done("done");
       auto end = system_clock::now();
       std::cout << duration_cast<milliseconds>(end - start).count() << "ms"

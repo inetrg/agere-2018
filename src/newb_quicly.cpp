@@ -223,11 +223,16 @@ quicly_transport::write_some(io::network::newb_base* parent) {
   // send data and close stream afterwards.
   quicly_streambuf_egress_write(stream_, buf, len);
 
+  parent->stop_timestamp_pre_quic();
+
   if (send_pending(fd_, conn_.get())) {
     CAF_LOG_ERROR("send failed"
                   << CAF_ARG(io::network::last_socket_error_as_string()));
     return io::network::rw_state::failure;
   }
+
+  parent->stop_timestamp_post_quic();
+
   written += len;
   // since the whole buffer is copied, we can call prepare next write every time
   prepare_next_write(parent);

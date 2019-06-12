@@ -127,7 +127,7 @@ add(src layers)
 add(src pingpong_udp)
 add(src pingpong_tcp)
 add(src pp_tcp_pure)
-add(src tcp-big-data)
+add(src tcp_big_data)
 
 include_directories(caf)
 include_directories(caf/detail)
@@ -148,24 +148,6 @@ target_link_libraries(quic_big_data
                       ${QUICLY_LIBRARIES}
                       ${PTLS_LIBRARIES}
                       ${OPENSSL_LIBRARIES})
-
-
-add_executable(pingpong_quic-1
-    src/newb_quicly.cpp
-    src/quicly_cb.cpp
-    src/pingpong_quicly.1.cpp)
-
-target_link_libraries(pingpong_quic-1
-    ${CMAKE_DL_LIBS}
-    ${CAF_LIBRARY_IO}
-    ${CAF_LIBRARY_CORE}
-    ${BENCHMARK_LIBRARIES}
-    ${CMAKE_THREAD_LIBS_INIT}
-    ${QUICLY_LIBRARIES}
-    ${PTLS_LIBRARIES}
-    ${OPENSSL_LIBRARIES})
-
-
 
 add_executable(pingpong_quic
                src/newb_quicly.cpp
