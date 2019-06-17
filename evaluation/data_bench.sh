@@ -35,6 +35,31 @@ function traditional_tcp_bench {
 }
 
 
+function udp_bench {
+        echo "# udp_bench $1"
+        for i in {0..10}
+        do
+                echo "round $i"
+                ./udp_big_data -s -b $1 1>$out_path/udp-server-$1-$i.out 2>$out_path/udp-server-$1-$i.err &
+                ./udp_big_data -b $1 1>$out_path/udp-client-$1-$i.out 2>$out_path/udp-client-$1-$i.err
+        done
+}
+
+
+function ordered_udp_bench {                                       
+        echo "# udp_bench $1"            
+        for i in {0..10}
+        do
+                echo "round $i"
+                ./udp_big_data -o -s -b $1 1>$out_path/ordered-udp-server-$1-$i.out 2>$out_path/ordered-udp-server-$1-$i.err & 
+                ./udp_big_data -o -b $1 1>$out_path/ordered-udp-client-$1-$i.out 2>$out_path/ordered-udp-client-$1-$i.err 
+        done
+}
+
+
+
+
+
 mkdir out
 #rm out/*.out out/*.err
 cd ..
@@ -57,17 +82,28 @@ cd $ROOT_DIR/build/bin
 #	quic_bench $size
 #done
 
-echo "starting tcp benchmark now"
+#echo "starting tcp benchmark now"
+#for size in 1M 10M 100M 1G
+#do
+#	tcp_bench $size
+#done
+
+#echo "starting traditional tcp benchmark now"
+#for size in 1M 10M 100M 1G
+#do
+#        traditional_tcp_bench $size
+#done
+
+echo "starting udp benchmark now"
 for size in 1M 10M 100M 1G
 do
-	tcp_bench $size
+        udp_bench $size
 done
 
-echo "starting traditional tcp benchmark now"
-echo "starting tcp benchmark now"
+echo "starting ordered udp benchmark now"            
 for size in 1M 10M 100M 1G
 do
-        traditional_tcp_bench $size
+        ordered_udp_bench $size            
 done
 
 

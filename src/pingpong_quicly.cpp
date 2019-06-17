@@ -232,6 +232,15 @@ void caf_main(actor_system& sys, const config& cfg) {
       auto end = system_clock::now();
       std::cout << duration_cast<milliseconds>(end - start).count() << "ms"
                 << std::endl;
+
+      auto ptr = caf::actor_cast<caf::abstract_actor *>(client);
+      CAF_ASSERT(ptr != nullptr);
+      auto &ref = dynamic_cast<io::newb<policy::raw> &>(*ptr);
+
+      auto start_ts = ref.get_start_timestamps();
+      auto end_ts_pre_quic = ref.get_start_timestamps();
+      auto end_ts_post_quic = ref.get_start_timestamps();      
+
       self->send(client, exit_reason::user_shutdown);
     }
   } else {

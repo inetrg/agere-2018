@@ -13,6 +13,8 @@ evaluation/pingpong/*.csv
 figs/*.tikz
 figs/*.pdf
 data/*-file
+evaluation/out/*.out
+evaluation/out/*.err
 
 ### Python ###
 __pycache__/
