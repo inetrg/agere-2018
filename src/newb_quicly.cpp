@@ -208,6 +208,8 @@ void quicly_transport::configure_read(io::receive_policy::config config) {
 
 io::network::rw_state
 quicly_transport::write_some(io::network::newb_base* parent) {
+  using namespace::std::chrono;
+
   CAF_LOG_TRACE("");
   reset_timeout(parent);
   const void* buf = send_buffer.data() + written;
@@ -231,6 +233,8 @@ quicly_transport::write_some(io::network::newb_base* parent) {
     return io::network::rw_state::failure;
   }
 
+  std::this_thread::sleep_for(milliseconds(1));
+
   parent->stop_timestamp_post_quic();
 
   written += len;
@@ -245,6 +249,7 @@ void quicly_transport::prepare_next_write(io::network::newb_base* parent) {
   send_buffer.clear();
   if (offline_buffer.empty()) {
     if (parent_) {
+      // remove newb_base from write_set of acceptor
       parent_->stop_writing();
     } else {
       parent->stop_writing();
@@ -261,6 +266,7 @@ void quicly_transport::flush(io::network::newb_base* parent) {
   CAF_LOG_TRACE(CAF_ARG(offline_buffer.size()));
   if (!offline_buffer.empty() && !writing && connected) {
     if (parent_) {
+      // add newb_base to write_set of acceptor
       parent_->start_writing(); // this transport is multiplexed
     } else {
       parent->start_writing(); // this one isn't

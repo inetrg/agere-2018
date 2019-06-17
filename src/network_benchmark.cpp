@@ -234,6 +234,35 @@ void caf_main(actor_system& sys, const config& cfg) {
                 << std::endl;
 
       self->send(client, exit_reason::user_shutdown);
+      
+      // now get the different timestamps from the transport layer
+      auto ptr = caf::actor_cast<caf::abstract_actor*>(client);
+      std::cout << "ptr 1" << std::endl;
+      CAF_ASSERT(ptr != nullptr);
+      auto &ref = dynamic_cast<io::newb<policy::new_raw_msg> &>(*ptr);
+
+
+      auto start_ts = ref.get_start_timestamps();
+      auto end_ts_pre_quic = ref.get_start_timestamps();
+      auto end_ts_post_quic = ref.get_start_timestamps();      
+      std::vector<nanoseconds> pre_quic_duration;
+      std::vector<nanoseconds> post_quic_duration;
+
+      nanoseconds pre_median(0);
+      nanoseconds post_median(0);
+
+      std::cout << "start_ts.size() = " << start_ts.size() << std::endl;
+      std::cout << "start = " << start_ts[0].count() << "end_ts = " << end_ts_post_quic[0].count() << std::endl;
+      for (int i = 0; i < start_ts.size(); ++i) {
+        pre_quic_duration.push_back(end_ts_pre_quic[i]-start_ts[i]);
+        pre_median += pre_quic_duration[i];
+        post_quic_duration.push_back(end_ts_post_quic[i]-start_ts[i]);
+        post_median += post_quic_duration[i];
+      }
+      pre_median /= start_ts.size();
+      post_median /= start_ts.size();
+      std::cout << "pre_median = " << pre_median.count() << " ns" << std::endl;
+      std::cout << "post_median = " << post_median.count() << " ns" << std::endl;
     }
   } else {
     if (cfg.is_server) {

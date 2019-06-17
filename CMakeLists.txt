@@ -163,3 +163,19 @@ target_link_libraries(pingpong_quic
                       ${QUICLY_LIBRARIES}
                       ${PTLS_LIBRARIES}
                       ${OPENSSL_LIBRARIES})
+
+add_executable(network_benchmark
+               src/newb_quicly.cpp
+               src/quicly_cb.cpp
+               src/network_benchmark.cpp)
+
+target_link_libraries(network_benchmark
+                      ${CMAKE_DL_LIBS}
+                      ${CAF_LIBRARY_IO}
+                      ${CAF_LIBRARY_CORE}
+                      ${BENCHMARK_LIBRARIES}
+                      ${CMAKE_THREAD_LIBS_INIT}
+                      ${QUICLY_LIBRARIES}
+                      ${PTLS_LIBRARIES}
+                      ${OPENSSL_LIBRARIES})
+
