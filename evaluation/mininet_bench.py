@@ -6,11 +6,6 @@
 import time
 import sys
 import argparse
-
-#sys.path.insert(0, mininet_path)
-
-print(sys.path)
-
 import mininet
 
 from mininet.topo import Topo
@@ -109,10 +104,13 @@ def main():
     parser.add_argument('-T', '--threads', help='set number of threads      (1)', type=int, default=1)
     parser.add_argument('-R', '--rto',     help='set min rto for TCP       (40)', type=int, default=40)
     parser.add_argument('-o', '--ordered', help='enable ordering for UDP       ', action='store_true')
+    parser.add_argument('-b', '--big-file', help='send big files instead of pingpong', action='store_true')
+    parser.add_argument('-m', '--mode', help='set mode [1M|10M|100M|1G]', type=string, default='1M')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-t', '--tcp',  help='use TCP' , action='store_true')
     group.add_argument('-u', '--udp',  help='use UDP' , action='store_true')
     group.add_argument('-q', '--quic', help='use QUIC', action='store_true')
+    
     args = vars(parser.parse_args())
     run = 0
     max_runs = args['runs']
@@ -161,14 +159,28 @@ def main():
         caf_opts = '--scheduler.max-threads={}'.format(args['threads'])
         prog = ''
         if args['tcp']:
-            prog = 'pingpong_tcp'
-	elif args['udp']:
-            prog = 'pingpong_udp'
+            if args['big-file']:
+                prog = 'tcp_big_data'
+                if args['mode']:
+                    caf_opts = '{} -b {}'.format(caf_opts, args['mode'])
+            else:
+                prog = 'pingpong_tcp'
+        elif args['udp']:
+            if args['big-file']:
+                prog = 'udp_big_data'
+                if args['mode']:
+                    caf_opts = '{} -b {}'.format(caf_opts, args['mode'])
+            else:
+                prog = 'pingpong_udp'
             if args['ordered']:
                 caf_opts = '{} --ordered'.format(caf_opts)
         elif args['quic']:
-            prog = 'pingpong_quic'
-
+            if args['big-file']:
+                prog = 'quic_big_data'
+                if args['mode']:
+                    caf_opts = '{} -b {}'.format(caf_opts, args['mode'])
+            else:
+                prog = 'pingpong_quic'
         print("Starting server")
         servercommand = '../build/bin/{} -s {} '.format(prog, caf_opts)
         print('> {}'.format(servercommand))
@@ -180,7 +192,7 @@ def main():
         sleep(1)
 
         print("Starting client")
-	# previous --host=\\"{}\\" ...
+	      # previous --host=\\"{}\\" ...
         clientcommand = '../build/bin/{} -m 2000 --host={} {}'.format(prog, h1.IP(), caf_opts)
         print('> {}'.format(clientcommand))
         # h2.cmdPrint(clientcommand)
