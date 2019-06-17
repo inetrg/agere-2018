@@ -250,6 +250,8 @@ void caf_main(actor_system& sys, const config& cfg) {
       return;
   }
 
+  std::cerr << "data_path=" << file_name << std::endl;
+
   if (!cfg.traditional) {
     if (cfg.is_server) {
       std::cerr << "creating server" << std::endl;

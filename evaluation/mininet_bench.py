@@ -104,8 +104,8 @@ def main():
     parser.add_argument('-T', '--threads', help='set number of threads      (1)', type=int, default=1)
     parser.add_argument('-R', '--rto',     help='set min rto for TCP       (40)', type=int, default=40)
     parser.add_argument('-o', '--ordered', help='enable ordering for UDP       ', action='store_true')
-    parser.add_argument('-b', '--big-file', help='send big files instead of pingpong', action='store_true')
-    parser.add_argument('-m', '--mode', help='set mode [1M|10M|100M|1G]', type=string, default='1M')
+    parser.add_argument('-f', '--file', help='send big files instead of pingpong', action='store_true')
+    parser.add_argument('-m', '--mode', help='set mode [1M|10M|100M|1G]', type=str, default='1M')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-t', '--tcp',  help='use TCP' , action='store_true')
     group.add_argument('-u', '--udp',  help='use UDP' , action='store_true')
@@ -159,31 +159,29 @@ def main():
         caf_opts = '--scheduler.max-threads={}'.format(args['threads'])
         prog = ''
         if args['tcp']:
-            if args['big-file']:
+            if args['file']:
                 prog = 'tcp_big_data'
-                if args['mode']:
-                    caf_opts = '{} -b {}'.format(caf_opts, args['mode'])
+                caf_opts = '{} -b {}'.format(caf_opts, args['mode'])
             else:
                 prog = 'pingpong_tcp'
         elif args['udp']:
-            if args['big-file']:
+            if args['file']:
                 prog = 'udp_big_data'
-                if args['mode']:
-                    caf_opts = '{} -b {}'.format(caf_opts, args['mode'])
+                caf_opts = '{} -b {}'.format(caf_opts, args['mode'])
             else:
                 prog = 'pingpong_udp'
             if args['ordered']:
                 caf_opts = '{} --ordered'.format(caf_opts)
         elif args['quic']:
-            if args['big-file']:
+            if args['file']:
                 prog = 'quic_big_data'
-                if args['mode']:
-                    caf_opts = '{} -b {}'.format(caf_opts, args['mode'])
+                caf_opts = '{} -b {}'.format(caf_opts, args['mode'])
             else:
                 prog = 'pingpong_quic'
         print("Starting server")
         servercommand = '../build/bin/{} -s {} '.format(prog, caf_opts)
-        print('> {}'.format(servercommand))
+        print(servercommand)
+	print('> {}'.format(servercommand))
         # h1.cmdPrint(servercommand)
         # p1 = int(h1.cmd('echo $!'))
         p1 = h1.popen(servercommand, shell=True, universal_newlines=True, stdout=serverout, stderr=servererr)
@@ -193,8 +191,9 @@ def main():
 
         print("Starting client")
 	      # previous --host=\\"{}\\" ...
-        clientcommand = '../build/bin/{} -m 2000 --host={} {}'.format(prog, h1.IP(), caf_opts)
-        print('> {}'.format(clientcommand))
+        clientcommand = '../build/bin/{} --host={} {}'.format(prog, h1.IP(), caf_opts)
+        print(clientcommand)
+	print('> {}'.format(clientcommand))
         # h2.cmdPrint(clientcommand)
         # p2 = int(h2.cmd('echo $!'))
         p2 = h2.popen(clientcommand, shell=True, universal_newlines=True, stdout=clientout, stderr=clienterr)
