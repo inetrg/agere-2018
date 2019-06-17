@@ -4,26 +4,26 @@ require(scales)
 require(RColorBrewer)
 require(gridExtra)
 
-pptcp <- read.csv("tcp-data.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
+pptcp <- read.csv("csv/tcp-data.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
 
 pptcp$avg <- rowMeans(pptcp[,2:11])
 pptcp$sdev <- apply(pptcp[,2:11], 1, sd)
 pptcp$proto <- 'TCP-newb'
 
-ppquic <- read.csv("quic-data.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
+ppquic <- read.csv("csv/quic-data.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
 
 ppquic$avg <- rowMeans(ppquic[,2:11])
 ppquic$sdev <- apply(ppquic[,2:11], 1, sd)
 ppquic$proto <- 'QUIC'
 
-#pptradtcp <- read.csv("traditional-tcp-client.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
+pptradtcp <- read.csv("csv/traditional-tcp-data.csv", sep=",", as.is=c(numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric, numeric))
 
-#pptradtcp$avg <- rowMeans(pptcp[,2:11])
-#pptradtcp$sdev <- apply(pptcp[,2:11], 1, sd)
-#pptradtcp$proto <- 'TCP-traditional'
+pptradtcp$avg <- rowMeans(pptcp[,2:11])
+pptradtcp$sdev <- apply(pptcp[,2:11], 1, sd)
+pptradtcp$proto <- 'TCP-traditional'
 
 ppdf <- rbind(pptcp, ppquic)
-#ppdf <- rbind(ppdf, ppquic)
+ppdf <- rbind(ppdf, pptradtcp)
 ppdf$upper <- ppdf$avg + ppdf$sdev
 ppdf$lower <- ppdf$avg - ppdf$sdev
 

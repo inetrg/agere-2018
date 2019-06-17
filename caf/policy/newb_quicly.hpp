@@ -187,6 +187,7 @@ private:
   socklen_t salen_;
   std::map<quicly_conn_t*, actor> newbs_;
   quicly_stream_open_accept<Message> stream_open_;
+  std::set<io::network::newb_base*> write_set;
 
   // quicly state
   quicly_stream_callbacks_t stream_callbacks = {
@@ -390,6 +391,14 @@ public:
         CAF_LOG_ERROR("send_pending failed");
       }
     }
+  }
+
+  void add_to_write_set(io::network::newb_base* newb) {
+    write_set.emplace(newb);
+  }
+
+  void remove_from_write_set(io::network::newb_base* newb) {
+    write_set.erase(write_set.find(newb), write_set.end());
   }
 
   error write_event(io::network::acceptor_base* base) {
