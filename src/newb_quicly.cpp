@@ -347,6 +347,7 @@ void quicly_transport::set_timeout(io::network::newb_base* base) {
   auto timeout_at = quicly_get_first_timeout(conn_.get());
   quicly_context_t *ctx = quicly_get_context(conn_.get());
   int64_t delta = timeout_at - ctx->now->cb(ctx->now);
+  std::cout << "timeout_delta: " << delta << " ms" << std::endl;
   base->set_timeout(std::chrono::milliseconds(delta), 
                     caf::io::transport_atom::value, 0);
 }
